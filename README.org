@@ -1,0 +1,39 @@
+#+TITLE:Org Outline Tree
+
+This package offers an Org mode outline window that does not use indirect buffers.
+
+Currently this is on its infancy and it may or may not have a bright future. This means that this package will not make into MELPA before it reaches some level of maturity.
+
+#+attr_html: :alt  :align center :class img :width 1000
+#+attr_org: :width 900
+[[./assets/screenshot.png]]
+
+In this pre-alpha release, this package can display all headlines as an outline tree on the right side of the frame. You can press =[enter]= to scroll your buffer to the selected heading, or you can use the universal prefix before pressing =[enter]= to have your buffer narrowed to the selected heading.
+
+This is a list of features I want to implement before doing a proper release of the package:
+
+- Promote or demote a heading from the outline;
+- Move headings up and down;
+- Rename headings from the outline;
+- Have a configuration for the window position;
+- Add default keybindings for Vanilla Emacs and Evil;
+
+And this is a list of features I want to have in this package but I don't want to commit to it right away:
+
+- Add a toggle to make the outline and the target buffer synchronize their expand/collapse state;
+- Add all keybindings you can use on a heading on an org file;
+- Add some hydra or transient helpers for the outline shortcuts;
+- Refactor headings into their own org file;
+- Embark integration;
+
+There are also two features I really want but I don't know how to implement them:
+
+- Auto resize the outline's window according to the length of its headings.
+
+  If I was to implement this feature just for users of fixed width fonts, it would be a breeze to get this done, but I dimply don't know how to /measure/ a string with a given font on Emacs! If you know how to do it, ping me!
+
+- Add support for TODO items in the outline.
+
+  My issue here is more an architecture decision problem. Since TODOs are essentially normal headings with the word "TODO" prefixing them, how should I display them? My initial idea was show them grouped in a child node from their parents under a node called /Tasks/. The problem here is when someone decides add more subheadings and text after the TODO. On that case, what should I do? Add the next section as a child section of its parent? Consider everything after it as part of the task?
+
+  So, if you have a good idea on how to handle TODOs from an outline perspective, also ping me for a quick chat!
