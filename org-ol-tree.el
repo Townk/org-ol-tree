@@ -6,9 +6,9 @@
 ;; Maintainer: Thiago Alves <thiago@rapinialves.com>
 ;; Created: March 20, 2021
 ;; Version: 0.0.1
-;; Keywords: org, org-modee, outline, tree, tree-view, treemacs
+;; Keywords: org, org-mode, outline, tree, tree-view, treemacs
 ;; Homepage: https://github.com/Townk/org-ol-tree
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "27.1") (org "0.5") (treemacs "20210304.2130") (s "20180406.808") (seq) (subr-x))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -21,7 +21,17 @@
 ;;
 ;;; Code:
 
+(require 'org)
 (require 'treemacs)
+(require 's)
+(require 'all-the-icons)
+(require 'seq)
+(require 'subr-x)
+
+
+(defvar-local org-ol-tree--target-buffer nil
+  "A buffer local variable used to hold the buffer object where the outline
+should act on.")
 
 
 (defun org-ol-tree--section-to-string (section-stack)
@@ -228,7 +238,7 @@ the outline."
 
   (let* ((origin-buffer (current-buffer))
          (buffer (get-buffer-create (format "*OrgOutlineTree:%s*" (buffer-name origin-buffer))))
-         (window (+popup-buffer buffer '((side . right)))))
+         (window (display-buffer-in-side-window buffer '((side . right)))))
     ;; (set-window-margins window 2 2)
     (select-window window)
     (treemacs-initialize)
@@ -268,6 +278,25 @@ The ITEM structure is defined on the `:more-properties' value given to the
                                             :ol-point ,heading-location))))
 
 
+(defun org-ol-tree--get-root-label ()
+  "Return a string label for the outline root node.
+
+The label is given by the title on the target buffer if one is defined, by the
+file name of the target buffer transformed to title case, if the target buffer
+has a file associated with it, or by the target's buffer name transformed to
+title case."
+  (when (bound-and-true-p org-ol-tree--target-buffer)
+    (with-current-buffer org-ol-tree--target-buffer
+      (save-excursion
+        (goto-char (point-min))
+        (cond
+         ((re-search-forward "^\\+TITLE:[ \t]*\\([^\n]+\\)" nil t)
+          (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
+         ((buffer-file-name)
+          (s-titleized-words (buffer-file-name)))
+         (t (s-titleized-words (buffer-name))))))))
+
+
 (treemacs-define-leaf-node org-ol-section 'dynamic-icon
                            :ret-action #'org-ol-tree/visit-section
                            :mouse1-action #'org-ol-tree/visit-section)
@@ -289,8 +318,8 @@ The ITEM structure is defined on the `:more-properties' value given to the
   :top-level-marker t
   :root-face 'treemacs-root-face
   :root-key-form 'Outline
-  :root-label (with-current-buffer org-ol-tree--target-buffer
-                (or (+org--get-property "TITLE") (s-titleized-words (buffer-name)))))
+  :root-label (org-ol-tree--get-root-label))
 
 
 (provide 'org-ol-tree)
+;;; org-ol-tree.el ends here
