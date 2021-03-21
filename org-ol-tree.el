@@ -8,7 +8,7 @@
 ;; Version: 0.0.1
 ;; Keywords: org, org-mode, outline, tree, tree-view, treemacs
 ;; Homepage: https://github.com/Townk/org-ol-tree
-;; Package-Requires: ((emacs "27.1") (org "0.5") (treemacs "20210304.2130") (s "20180406.808") (seq) (subr-x))
+;; Package-Requires: ((emacs "26.1") (org "9.5") (all-the-icons "4.0.1") (treemacs "2.8") (s "1.12.0") (seq))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
