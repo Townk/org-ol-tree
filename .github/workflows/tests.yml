@@ -53,3 +53,8 @@ jobs:
 
       - name: Run tests
         run: cask exec buttercup -L . -L tests
+
+      - name: Check coverage with Coveralls
+        uses: coverallsapp/github-action@master
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
