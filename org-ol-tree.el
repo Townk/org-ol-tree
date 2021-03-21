@@ -19,6 +19,8 @@
 ;;
 ;;;; Change Log:;
 ;;
+;; TODO: Define a strategy for cange logs to use when I public release it;
+;;
 ;;; Code:
 
 (require 'org)
