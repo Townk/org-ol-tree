@@ -45,10 +45,11 @@ jobs:
         with:
           version: 'snapshot'
       
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - name: Checkout org-ol-tree repo
         uses: actions/checkout@v2
 
-      # Runs a single command using the runners shell
+      - name: Install Cask dependencies
+        run: cask install
+
       - name: Run tests
         run: cask exec buttercup -L . -L tests
