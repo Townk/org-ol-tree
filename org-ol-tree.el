@@ -180,7 +180,11 @@ node information."
   "Switch to the buffer saved in node at point.
 
 When this function is invoked with a prefix argument, NARROW-P is set to a
-non-nil value and it causes the target section to be narrowed."
+non-nil value and it toggles the narrowed state. For instance, if your buffer
+is not narrowed, invoking this function with a prefix argument causes the
+selected section to get narrowed. From now on, subsequent calls of this feature
+narrow the selected section, until you call it with th universal argument
+again, which causes the buffer to get widen."
   (interactive "P")
 
   (unless
@@ -192,17 +196,21 @@ non-nil value and it causes the target section to be narrowed."
                  (heading-loc (treemacs-button-get node :ol-point)))
         (select-window (next-window))
         (switch-to-buffer buffer)
-        (goto-char heading-loc)
-        (org-reveal)
-        (org-show-entry)
-        ;; (evil-scroll-line-to-top nil)
-        (recenter (min (max 0 scroll-margin)
-                       (truncate (/ (window-body-height) 4.0)))
-                  t)
-        (when narrow-p
-          (org-narrow-to-subtree))
-        (select-window window)
-        (treemacs-pulse-on-success))
+        (let ((narrow-p (or (and (not narrow-p) (buffer-narrowed-p))
+                            (and narrow-p (not (buffer-narrowed-p))))))
+          (widen)
+          (goto-char heading-loc)
+          (org-reveal)
+          (org-show-entry)
+          ;; (evil-scroll-line-to-top nil)
+          (recenter (min (max 0 scroll-margin)
+                         (truncate (/ (window-body-height) 4.0)))
+                    t)
+          (when narrow-p
+            (org-narrow-to-subtree))
+          (select-window window)
+          (treemacs-pulse-on-success)
+          t))
     (user-error "No section information found on current point")))
 
 
