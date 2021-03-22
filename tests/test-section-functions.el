@@ -10,11 +10,7 @@
 ;;; Code:
 
 (when (require 'undercover nil t)
-  (setq undercover-force-coverage t)
-  (undercover "*.el"
-              (:report-format 'coveralls)
-              (:report-file "coverage/lcov.info")
-              (:send-report nil)))
+  (undercover "org-ol-tree.el"))
 
 (require 'org-ol-tree)
 (require 'buttercup)
