@@ -1,6 +1,6 @@
 #+TITLE:Org Outline Tree
 
-[[https://github.com/Townk/org-ol-tree/blob/main/LICENSE][http://img.shields.io/badge/license-MIT-brightgreen.svg]] [[https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml][https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml/badge.svg]] [[https://coveralls.io/github/Townk/org-ol-tree?branch=main][https://coveralls.io/repos/github/Townk/org-ol-tree/badge.svg?branch=main]]
+[[https://github.com/Townk/org-ol-tree/blob/main/LICENSE][http://img.shields.io/badge/license-MIT-brightgreen.svg]] [[https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml][https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml/badge.svg]] [[https://coveralls.io/github/Townk/org-ol-tree][https://coveralls.io/repos/github/Townk/org-ol-tree/badge.svg]]
 
 This package offers an Org mode outline window that does not use indirect buffers.
 

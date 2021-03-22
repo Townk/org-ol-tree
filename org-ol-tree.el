@@ -32,6 +32,7 @@
 should act on.")
 
 
+
 ;;;; Helper functions
 
 ;;; Sections
@@ -164,6 +165,7 @@ node information."
             (reverse (car (org-ol-tree--merged-stack doc 1)))))))))
 
 
+
 ;;;; UI functions
 
 ;;; Icons
@@ -216,6 +218,7 @@ title case."
          (t (s-titleized-words (buffer-name))))))))
 
 
+
 ;;;; Action functions
 
 ;;; Visit node
@@ -258,6 +261,7 @@ again, which causes the buffer to get widen."
     (user-error "No section information found on current point")))
 
 
+
 ;;;; Treemacs extension
 
 (defmacro org-ol-tree--render-action ()
@@ -309,6 +313,7 @@ The ITEM structure is defined on the `:more-properties' value given to the
   :root-label (org-ol-tree--get-root-label))
 
 
+
 ;;;; Commands
 
 ;;;###autoload
