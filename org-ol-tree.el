@@ -48,6 +48,7 @@ Example::
 
   ;; => \"1.2.3\""
   (when (and section-stack
+             (listp section-stack)
              (seq-every-p 'number-or-marker-p section-stack))
     (string-join (reverse (mapcar 'number-to-string section-stack))
                  ".")))
