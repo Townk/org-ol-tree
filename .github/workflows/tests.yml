@@ -1,6 +1,6 @@
 # This is a basic workflow to help you get started with Actions
 
-name: CI
+name: Tests
 
 # Controls when the action will run. 
 on:
@@ -50,5 +50,6 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs: test
+
     steps:
-    - run: curl "https://coveralls.io/webhook?repo_name=$GITHUB_REPOSITORY&repo_token=${{ secrets.GITHUB_TOKEN }}" -d "payload[build_num]=$GITHUB_RUN_NUMBER&payload[status]=done"
+      - run: curl "https://coveralls.io/webhook?repo_name=$GITHUB_REPOSITORY&repo_token=${{ secrets.GITHUB_TOKEN }}" -d "payload[build_num]=$GITHUB_RUN_NUMBER&payload[status]=done"
