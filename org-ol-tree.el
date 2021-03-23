@@ -293,10 +293,12 @@ again, which causes the buffer to get widen."
                         org-ol-tree--target-buffer))
            (node (treemacs-current-button))
            (window (get-buffer-window))
+           (doc-window (or (get-buffer-window org-ol-tree--target-buffer)
+                           (next-window)))
            (heading (treemacs-button-get node :heading))
            (heading-marker (org-ol-tree-heading-marker heading)))
       (progn
-        (select-window (next-window))
+        (select-window doc-window)
         (switch-to-buffer buffer)
         (let ((narrow-p (or (and (not narrow-p) (buffer-narrowed-p))
                             (and narrow-p (not (buffer-narrowed-p))))))
