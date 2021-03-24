@@ -89,44 +89,48 @@ Usually, the value of this variable is `left' or `right'.")
 
 
 (defvar org-ol-tree-icons-theme-plist
-  (list 'all-the-icons `(:root ,(all-the-icons-material "description"
-                                                        :height 0.95
-                                                        :v-adjust -0.17)
-                         :expanded ,(all-the-icons-material "keyboard_arrow_down"
-                                                            :height 0.95
-                                                            :v-adjust -0.17)
-                         :collapsed ,(all-the-icons-material "chevron_right"
-                                                             :height 0.95
-                                                             :v-adjust -0.17)
-                         :section "§ %(section)")
-        'unicode `(:root "■"  ; <-- this is bad! Accepting suggestions for a better one!
-                   :expanded "▾ "
-                   :collapsed "▸ "
-                   :section "§ %(section)")
-        'ascii `(:root "*"
-                 :expanded "- "
-                 :collapsed "+ "
-                 :section "%(section)")
-        'iconless-fancy `(:root ""
-                          :expanded ,(all-the-icons-material "keyboard_arrow_down"
-                                                             :height 0.95
-                                                             :v-adjust -0.17)
-                          :collapsed ,(all-the-icons-material "chevron_right"
-                                                              :height 0.95
-                                                              :v-adjust -0.17)
-                          :section "")
-        'iconless-unicode `(:root ""
-                            :expanded "▾ "
-                            :collapsed "▸ "
-                            :section "")
-        'iconless-ascii `(:root ""
-                          :expanded "- "
-                          :collapsed "+ "
-                          :section "")
-        'iconless `(:root ""
-                    :expanded ""
-                    :collapsed ""
-                    :section ""))
+  (-non-nil
+   (append '()
+          (when org-ol-tree-packages--all-the-icons-p
+            (list 'all-the-icons `(:root ,(all-the-icons-material "description"
+                                                                  :height 0.95
+                                                                  :v-adjust -0.17)
+                                   :expanded ,(all-the-icons-material "keyboard_arrow_down"
+                                                                      :height 0.95
+                                                                      :v-adjust -0.17)
+                                   :collapsed ,(all-the-icons-material "chevron_right"
+                                                                       :height 0.95
+                                                                       :v-adjust -0.17)
+                                   :section "§ %(section)")))
+          (list 'unicode `(:root "■"  ; <-- this is bad! Accepting suggestions for a better one!
+                           :expanded "▾ "
+                           :collapsed "▸ "
+                           :section "§ %(section)")
+                'ascii `(:root "*"
+                         :expanded "- "
+                         :collapsed "+ "
+                         :section "%(section)"))
+          (when org-ol-tree-packages--all-the-icons-p
+            (list 'iconless-fancy `(:root ""
+                                    :expanded ,(all-the-icons-material "keyboard_arrow_down"
+                                                                       :height 0.95
+                                                                       :v-adjust -0.17)
+                                    :collapsed ,(all-the-icons-material "chevron_right"
+                                                                        :height 0.95
+                                                                        :v-adjust -0.17)
+                                    :section "")))
+          (list 'iconless-unicode `(:root ""
+                                    :expanded "▾ "
+                                    :collapsed "▸ "
+                                    :section "")
+                'iconless-ascii `(:root ""
+                                  :expanded "- "
+                                  :collapsed "+ "
+                                  :section "")
+                'iconless `(:root ""
+                            :expanded ""
+                            :collapsed ""
+                            :section ""))))
   "A property list of property list representing all icon themes available.
 
 An icon theme is a simple property list with four entries:
@@ -256,15 +260,20 @@ Examples::
 
 It has the basic information to build and draw a tree-like structure
 representing an entire org document."
-  (name :type string
+  (name nil
+        :type string
         :documentation "The org heading text with no decorations.")
-  (id :type string
+  (id nil
+      :type string
       :documentation "A string representing the section number.")
-  (marker :type marker
+  (marker nil
+          :type marker
           :documentation "Location of this heading on its org file buffer.")
-  (level :type number
+  (level nil
+         :type number
          :documentation "The nested level for this org heading.")
-  (parent :type org-ol-tree--heading
+  (parent nil
+          :type org-ol-tree--heading
           :documentation "The parent heading or nil if this is a root heading.")
   (subheadings (list)
                :type list
@@ -369,8 +378,7 @@ an Org buffer, raises a `user-error'."
           (let ((root (org-ol-tree-heading--create :name (org-ol-tree-heading-root-label)
                                                    :id 'Outline
                                                    :marker (point-min)
-                                                   :level 0
-                                                   :parent nil))
+                                                   :level 0))
                 current-heading)
             (while (outline-next-heading)
               (let ((this-heading (org-ol-tree-heading-create current-heading)))
@@ -496,7 +504,7 @@ The argument EVENT, is the same event received by the
              ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
              ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))
              ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))
-         (org-ol-tree-navigation--/visitcurrentn)))
+         (org-ol-tree-navigation--visit-current)))
       (treemacs--evade-image))))
 
 (defun org-ol-tree-input--doubleclick-action (event)
@@ -514,7 +522,7 @@ This function cancels any timer call from `org-ol-tree-input--leftclick-action'.
     (goto-char (posn-point (cadr event)))
     (when (region-active-p)
       (keyboard-quit))
-    (org-ol-tree-navigation--/visitcurrentn)))
+    (org-ol-tree-navigation--visit-current)))
 
 
 ;;; Navigation
@@ -591,15 +599,14 @@ again, which causes the buffer to get widen."
 (org-ol-tree-icons-update-theme)
 
 (treemacs-define-leaf-node org-ol-section 'dynamic-icon
-                           :ret-action #'org-ol-tree-navigation--/visitcurrentn
-                           :mouse1-action #'org-ol-tree-navigation--/visitcurrentn)
+                           :ret-action #'org-ol-tree-navigation--visit-current
+                           :mouse1-action #'org-ol-tree-navigation--visit-current)
 
 
 (treemacs-define-expandable-node org-ol-parent-section
   :icon-open-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'expanded)
   :icon-closed-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'collapsed)
-  :ret-action 'org-ol-tree-navigation--/visitcurrentn
-  :mouse1-action #'org-ol-tree-navigation--/visitcurrentn
+  :ret-action 'org-ol-tree-navigation--visit-current
   :query-function (reverse (org-ol-tree-heading-subheadings (treemacs-button-get node :heading)))
   :render-action
   (treemacs-render-node :icon (org-ol-tree-icons-section-icon item 'collapsed)
@@ -615,7 +622,7 @@ again, which causes the buffer to get widen."
 (treemacs-define-expandable-node org-ol-doc
   :icon-open (org-ol-tree-icons-root-icon)
   :icon-closed (org-ol-tree-icons-root-icon)
-  :ret-action 'org-ol-tree-navigation--/visitcurrentn
+  :ret-action 'org-ol-tree-navigation--visit-current
   :query-function (reverse (org-ol-tree-heading-subheadings (org-ol-tree-heading-root)))
   :top-level-marker t
   :root-face 'treemacs-root-face
