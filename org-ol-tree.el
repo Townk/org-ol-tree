@@ -30,28 +30,34 @@
 
 ;;;; ---- Variables
 
-;;; Constants
+;;; --- Constants ---------------------------------------------------------------
 
 (defconst org-ol-tree-packages--all-the-icons-p (require 'all-the-icons nil 'noerror)
   "Constant indicating if package all-the-icons is installed.")
 
+
 (defconst org-ol-tree-packages--evil-p (require 'evil-core nil 'noerror)
   "Constant indicating if package evil is installed.")
 
-;;; Private variables
+
+;;; --- Private variables -------------------------------------------------------
 
 (defvar-local org-ol-tree--org-buffer nil
   "A buffer local variable used to hold the buffer object where the outline
 should act on.")
 
+
 (defvar-local org-ol-tree-heading--root nil
   "Hold the root node for the displayed outline.")
+
 
 (defvar-local org-ol-tree-heading--root-dirt-p nil
   "Flag indicating the root hading needs to be rebuild.")
 
+
 (defvar-local org-ol-tree-input--debounce-timer nil
   "The timer waiting to debounce click operations on the tree view.")
+
 
 (defvar org-ol-tree-icons--selected-theme nil
   "This variable holds the current icon theme used by the outline.
@@ -63,7 +69,7 @@ Never update this variable manually. It is intended to self-mutate when calling
 the `org-ol-tree-icons-update-theme' function.")
 
 
-;;; Configuration variables
+;;; --- Configuration variables -------------------------------------------------
 
 (defvar org-ol-tree-mode-map (-doto (make-sparse-keymap)
                                (define-key [mouse-1]  #'org-ol-tree-input--leftclick-action)
@@ -172,9 +178,9 @@ The outline chooses the theme based on the following criteria:
 
 
 
-;;;; ---- Helper functions
+;;;; ---- Outline elements
 
-;;; Sections
+;;; --- Sections ---------------------------------------------------------------
 
 (defun org-ol-tree-section-p (stack-or-string)
   "Return t when STACK-OR-STRING is a valid section object.
@@ -252,7 +258,7 @@ Examples::
       new-stack)))
 
 
-;;; Headings
+;;; --- Headings ---------------------------------------------------------------
 
 (cl-defstruct (org-ol-tree-heading (:constructor org-ol-tree-heading--create)
                                    (:copier nil))
@@ -279,6 +285,7 @@ representing an entire org document."
                :type list
                :documentation "A collection of children headings."))
 
+
 (cl-defun org-ol-tree-heading-create (&optional previous-heading)
   "Create a new `org-ol-tree-heading' from `point' on current org buffer.
 
@@ -287,13 +294,15 @@ subheading of the given parent.
 
 If `current-buffer' is not an org buffer, or `point' is not over an org heading,
 this functions raises a user error."
-  (unless (and (eq major-mode 'org-mode)
-               (org-at-heading-p))
+  (unless (eq major-mode 'org-mode)
+    (user-error "Cannot create an org-ol-tree-heading on a non-org buffer"))
+
+  (unless (org-at-heading-p)
     (user-error "Cannot create an org-ol-tree-heading with cursor outside an actual org headline"))
 
   (unless (or (null previous-heading)
               (org-ol-tree-heading-p previous-heading))
-    (error "Given parent must be nil or a 'org-ol-tree-heading' object"))
+    (error "Given parent must be nil or an 'org-ol-tree-heading' object"))
 
   (let* ((previous-level (if (null previous-heading)
                              0
@@ -400,9 +409,9 @@ The root heading is cached on a buffer local variable"
 
 
 
-;;;; ---- UI functions
+;;;; ---- Outline visuals (UI)
 
-;;; Icons
+;;; --- Icons -------------------------------------------------------------------
 
 (defun org-ol-tree-icons-update-theme ()
   "Refresh `org-ol-tree-icons--selected-theme' values.
@@ -460,9 +469,9 @@ different than 'expanded."
 
 
 
-;;;; ---- Action functions
+;;;; ---- User interactions (Actions)
 
-;;; Mouse interaction
+;;; --- Mouse interaction -------------------------------------------------------
 
 (defun org-ol-tree-input--leftclick-action (event)
   "Function used to perform a mouse click on a node.
@@ -478,6 +487,7 @@ prefix EVENT is passed on to the executed action, if possible."
 
   (setq org-ol-tree-input--debounce-timer
         (run-with-idle-timer 0.1 nil #'org-ol-tree-input--expand-or-visit-current-node event)))
+
 
 (defun org-ol-tree-input--expand-or-visit-current-node (event)
   "Helper function called by `org-ol-tree-input--leftclick-action'.
@@ -507,6 +517,7 @@ The argument EVENT, is the same event received by the
          (org-ol-tree-navigation--visit-current)))
       (treemacs--evade-image))))
 
+
 (defun org-ol-tree-input--doubleclick-action (event)
   "Visit the clicked heading from EVENT.
 
@@ -525,7 +536,7 @@ This function cancels any timer call from `org-ol-tree-input--leftclick-action'.
     (org-ol-tree-navigation--visit-current)))
 
 
-;;; Navigation
+;;; --- Navigation --------------------------------------------------------------
 
 (defun org-ol-tree-navigation--collapse-current ()
   "Collapse an expandable section that is currently expanded.
