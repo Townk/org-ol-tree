@@ -72,6 +72,7 @@ the `org-ol-tree-icons-update-theme' function.")
                                (define-key (kbd "<right>") #'org-ol-tree-navigation--expand-current))
   "Key bindings for the `org-ol-tree-mode'.")
 
+
 (when org-ol-tree-packages--evil-p
   (evil-define-key '(normal) org-ol-tree-mode-map
     "h" #'org-ol-tree-navigation--collapse-current
@@ -79,6 +80,13 @@ the `org-ol-tree-icons-update-theme' function.")
     (kbd "<left>") #'org-ol-tree-navigation--collapse-current
     (kbd "<right>") #'org-ol-tree-navigation--expand-current
     ))
+
+
+(defvar org-ol-tree-window-position 'right
+  "Symbol indicating where to open the outline window.
+
+Usually, the value of this variable is `left' or `right'.")
+
 
 (defvar org-ol-tree-icons-theme-plist
   (list 'all-the-icons `(:root ,(all-the-icons-material "description"
@@ -140,6 +148,7 @@ all-the-icons icons.
 The `:section' icon is actually a simple one-line string where we replace the
 string \"%(section)\" by the section number of the heading. Different then the
 other icons, the `:section' icon allows any arbitrary size string.")
+
 
 (defvar org-ol-tree-icons-theme nil
   "The theme to use on the outline icons.
@@ -409,8 +418,6 @@ check the `org-ol-tree-icons-theme' variable documentation."
   "Return the string used as the icon for the root element."
   (let* ((root-icon (plist-get org-ol-tree-icons--selected-theme :root))
          (display-p (> (length root-icon) 0)))
-    (message "Root icon: %s" root-icon)
-    (message "Org buffer: %s" org-ol-tree--org-buffer)
     (concat
      " "
      (when display-p (propertize "--" 'face 'treemacs-root-face 'display root-icon))
@@ -640,7 +647,7 @@ the outline."
 
   (let* ((origin-buffer (current-buffer))
          (buffer (get-buffer-create (format "*OrgOutlineTree:%s*" (buffer-name origin-buffer))))
-         (window (display-buffer-in-side-window buffer '((side . right)))))
+         (window (display-buffer-in-side-window buffer `((side . ,org-ol-tree-window-position)))))
     ;; (set-window-margins window 2 2)
     (select-window window)
     (treemacs-initialize)
