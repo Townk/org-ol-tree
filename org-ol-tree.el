@@ -58,6 +58,8 @@ should act on.")
 (defvar-local org-ol-tree-input--debounce-timer nil
   "The timer waiting to debounce click operations on the tree view.")
 
+(defvar-local org-ol-tree-window--current-width 0
+  "The timer waiting to debounce click operations on the tree view.")
 
 (defvar org-ol-tree-icons--selected-theme nil
   "This variable holds the current icon theme used by the outline.
@@ -92,6 +94,60 @@ the `org-ol-tree-icons-update-theme' function.")
   "Symbol indicating where to open the outline window.
 
 Usually, the value of this variable is `left' or `right'.")
+
+
+(defvar org-ol-tree-window-max-width 0.4
+  "Define the outline window maximum width.
+
+If the value is a float between 0 and 1, the maximum width is given by
+multiplying this value and the maximum available size for the window.
+
+If this value is an integer greater or equal 1, the maximum size is the given
+value. If the option `org-ol-tree-window-use-pixel' is non nil, the given value
+is consider to be in pixels.
+
+If the given value does not fall into these two categories, its assumed you
+want the maximum width to be the size of the maximum available size. If it
+does, the value will also be capped between `window-min-width' and the maximum
+available size.")
+
+
+(defvar org-ol-tree-window-min-width 0.2
+  "Define the outline window minimum width.
+
+If the value is a float between 0 and 1, the minimum width is given by
+multiplying this value and the maximum available size for the window.
+
+If this value is an integer greater or equal 1, the minimum size is the given
+value itself. If the option `org-ol-tree-window-use-pixel' is non nil, the
+given value is consider to be in pixels.
+
+If the given value does not fall into these two categories, its assumed you
+want the minimum width to be the size of `window-min-width'. If it does, the
+value will also be capped between `window-min-width' and the maximum available
+size.")
+
+
+(defvar org-ol-tree-window-use-pixel t
+  "Flag indicating if window measurements should be in pixels.
+
+This flag will only be used on graphical frames, and it is useful if you have
+any `variable-pitch' among outline faces.")
+
+
+(defvar org-ol-tree-window-auto-resize t
+  "Indicates the outline window should adjust its size to show its content.
+
+When this option is nil, `org-ol-tree-window-max-width' is used as the outline
+window absolute size.")
+
+
+(defvar org-ol-tree-window-increase-only nil
+  "If set to a non nil value, only grow the size of the window.
+
+This behavior is applied during window resize, which happens when the window
+configuration for the outline window changes, or when use expands or collapses
+the nodes.")
 
 
 (defvar org-ol-tree-icons-theme-plist
@@ -468,6 +524,101 @@ different than 'expanded."
       'doom-themes-treemacs-file-face)))))
 
 
+;;; --- Window ------------------------------------------------------------------
+
+(defun org-ol-tree-window-use-pixel-p ()
+  "Return t if the measurement unit should be pixels.
+
+This function takes in account the value of `org-ol-tree-window-use-pixel' and
+if this frame is a graphical frame or not."
+  (and (member window-system '(x w32 ns))
+       org-ol-tree-window-use-pixel))
+
+
+(defun org-ol-tree-window--resize (window target-width min-width max-width
+                                          total-width char-width pixelwise)
+  "The actual resize function.
+
+This function is called by `org-ol-tree-window-resize' with all the calculated
+values in place to perform the window resizing.
+
+The calculated values needed here are as follows:
+
+- WINDOW: The window where the resize should happen;
+- TARGET-WIDTH: The desired width for the window;
+- MIN-WIDTH: The lower bound constraint for the window width;
+- MAX-WIDTH: The higher bound constraint for the window width;
+- TOTAL-WIDTH: The total available width to increase the window;
+- CHAR-WIDTH: The width of a character on the current face of current frame;
+- PIXELWISE: Indicates if the resize should happen in pixels (t value) or
+  columns (nil value)"
+  (unless pixelwise
+    (setq target-width (/ (+ target-width char-width -1) char-width)))
+
+  (setq target-width (max min-width (min max-width target-width)))
+
+  (unless (= target-width total-width)
+    (window-preserve-size window t)
+    (window-resize-no-error
+     window (- target-width total-width) t window pixelwise)
+    (when org-ol-tree-window-increase-only
+      (setq-local org-ol-tree-window--current-width target-width))))
+
+
+(defun org-ol-tree-window-resize ()
+  "Adjust the window width to fit the outline content as much as possible.
+
+The adjustment respects the value of `org-ol-tree-window-max-width' (check its
+documentation for more details).
+
+The majority of the code in this function was copied from the Emacs function
+`fit-window-to-buffer'."
+  (with-selected-window (selected-window)
+    (let* ((window (window-normalize-window (selected-window) t))
+           (frame (window-frame window))
+           (pixelwise (org-ol-tree-window-use-pixel-p))
+           (char-width (frame-char-width frame))
+           (total-width (window-size window t pixelwise))
+           (available-width (+ total-width
+                               (window-max-delta window t window nil t nil pixelwise)))
+           (max-width (cond
+                       ((<= org-ol-tree-window-max-width 0)
+                        available-width)
+                       ((integerp org-ol-tree-window-max-width)
+                        (min org-ol-tree-window-max-width available-width))
+                       ((> org-ol-tree-window-max-width 1) available-width)
+                       (t (min (round (* org-ol-tree-window-max-width (float available-width)))
+                               available-width)))))
+      (if org-ol-tree-window-auto-resize
+          (let* ((char-height (frame-char-height frame))
+                 (min-width (max (if pixelwise
+                                     (* char-width window-min-width)
+                                   window-min-width)
+                                 (window-min-size window nil window pixelwise)))
+                 (min-width (cond
+                             ((<= org-ol-tree-window-min-width 0)
+                              min-width)
+                             ((integerp org-ol-tree-window-min-width)
+                              (max org-ol-tree-window-min-width min-width))
+                             ((> org-ol-tree-window-max-width 1.0) min-width)
+                             (t (max (round (* org-ol-tree-window-min-width (float available-width)))
+                                     min-width))))
+                 (min-width (max min-width org-ol-tree-window--current-width))
+                 (width (+ (+ (car (window-text-pixel-size
+                                    window (window-start window) nil
+                                    (frame-pixel-width (window-frame window))
+                                    (* (window-body-height window pixelwise)
+                                       (if pixelwise 1 char-height))))
+                              (- total-width
+                                 (window-body-width window pixelwise)))
+                           (* char-width 2)))
+                 (window-size-fixed nil))
+            (org-ol-tree-window--resize window width min-width max-width
+                                        total-width char-width pixelwise))
+        (org-ol-tree-window--resize window max-width max-width max-width
+                                    total-width char-width pixelwise)))))
+
+
 
 ;;;; ---- User interactions (Actions)
 
@@ -618,6 +769,8 @@ again, which causes the buffer to get widen."
   :icon-open-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'expanded)
   :icon-closed-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'collapsed)
   :ret-action 'org-ol-tree-navigation--visit-current
+  :after-expand (org-ol-tree-window-resize)
+  :after-collapse (org-ol-tree-window-resize)
   :query-function (reverse (org-ol-tree-heading-subheadings (treemacs-button-get node :heading)))
   :render-action
   (treemacs-render-node :icon (org-ol-tree-icons-section-icon item 'collapsed)
@@ -634,6 +787,8 @@ again, which causes the buffer to get widen."
   :icon-open (org-ol-tree-icons-root-icon)
   :icon-closed (org-ol-tree-icons-root-icon)
   :ret-action 'org-ol-tree-navigation--visit-current
+  :after-expand (org-ol-tree-window-resize)
+  :after-collapse (org-ol-tree-window-resize)
   :query-function (reverse (org-ol-tree-heading-subheadings (org-ol-tree-heading-root)))
   :top-level-marker t
   :root-face 'treemacs-root-face
@@ -672,12 +827,13 @@ the outline."
     (setq-local org-ol-tree--org-buffer origin-buffer
                 treemacs--width-is-locked nil
                 window-size-fixed nil
-                treemacs-mode-map nil)
+                org-ol-tree-window--current-width 0)
 
     (setq header-line-format '("☰ Outline"))
     (set-window-buffer nil (current-buffer))
     (treemacs-ORG-OL-DOC-extension)
     (treemacs-expand-org-ol-doc)
+    (add-hook 'window-configuration-change-hook 'org-ol-tree-window-resize nil t)
     (beginning-of-line)
     (org-ol-tree-mode 1)))
 
