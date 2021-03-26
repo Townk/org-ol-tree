@@ -73,23 +73,6 @@ the `org-ol-tree-icons-update-theme' function.")
 
 ;;; --- Configuration variables -------------------------------------------------
 
-(defvar org-ol-tree-mode-map (-doto (make-sparse-keymap)
-                               (define-key [mouse-1]  #'org-ol-tree-input--leftclick-action)
-                               (define-key [double-mouse-1] #'org-ol-tree-input--doubleclick-action)
-                               (define-key (kbd "<left>") #'org-ol-tree-navigation--collapse-current)
-                               (define-key (kbd "<right>") #'org-ol-tree-navigation--expand-current))
-  "Key bindings for the `org-ol-tree-mode'.")
-
-
-(when org-ol-tree-packages--evil-p
-  (evil-define-key '(normal) org-ol-tree-mode-map
-    "h" #'org-ol-tree-navigation--collapse-current
-    "l" #'org-ol-tree-navigation--expand-current
-    (kbd "<left>") #'org-ol-tree-navigation--collapse-current
-    (kbd "<right>") #'org-ol-tree-navigation--expand-current
-    ))
-
-
 (defvar org-ol-tree-window-position 'right
   "Symbol indicating where to open the outline window.
 
@@ -441,8 +424,8 @@ an Org buffer, raises a `user-error'."
           (widen)
           (goto-char (point-min))
           (let ((root (org-ol-tree-heading--create :name (org-ol-tree-heading-root-label)
-                                                   :id 'Outline
-                                                   :marker (point-min)
+                                                   :id "0"
+                                                   :marker (point-min-marker)
                                                    :level 0))
                 current-heading)
             (while (outline-next-heading)
@@ -652,6 +635,7 @@ The argument EVENT, is the same event received by the
   (when (eq 'mouse-1 (elt event 0))
     (select-window (->> event (cadr) (nth 0)))
     (goto-char (posn-point (cadr event)))
+    (goto-char (point-at-bol))
 
     (when (region-active-p)
       (keyboard-quit))
@@ -682,12 +666,29 @@ This function cancels any timer call from `org-ol-tree-input--leftclick-action'.
   (when (eq 'double-mouse-1 (elt event 0))
     (select-window (->> event (cadr) (nth 0)))
     (goto-char (posn-point (cadr event)))
+    (goto-char (point-at-bol))
     (when (region-active-p)
       (keyboard-quit))
     (org-ol-tree-navigation--visit-current)))
 
 
 ;;; --- Navigation --------------------------------------------------------------
+
+(defun org-ol-tree-navigation--goto-root ()
+  "Move the cursor to the outline root node."
+  (interactive)
+  (treemacs-goto-node '(:custom "0")))
+
+
+(defun org-ol-tree-navigation--goto-last-opened-node ()
+  "Move the cursor to the last opened node.
+
+If the last node on the tree is a parent node with several children, but its
+state is collapsed, the parent not will be selected."
+  (interactive)
+  (goto-char (point-max))
+  (goto-char (point-at-bol)))
+
 
 (defun org-ol-tree-navigation--collapse-current ()
   "Collapse an expandable section that is currently expanded.
@@ -840,8 +841,90 @@ the outline."
 
 ;;;; ---- Mode definition
 
-(define-minor-mode org-ol-tree-mode "Treemacs generic mode."
-  nil nil org-ol-tree-mode-map)
+(define-minor-mode org-ol-tree-mode
+  "Org Outline Tree mode."
+  :keymap  (let ((map (make-sparse-keymap)))
+             (define-key map [mouse-1]        #'org-ol-tree-input--leftclick-action)
+             (define-key map [double-mouse-1] #'org-ol-tree-input--doubleclick-action)
+             (define-key map (kbd "<up>")     #'treemacs-previous-line)
+             (define-key map (kbd "C-p")      #'treemacs-previous-line)
+             (define-key map (kbd "<right>")  #'org-ol-tree-navigation--expand-current)
+             (define-key map (kbd "C-f")      #'org-ol-tree-navigation--expand-current)
+             (define-key map (kbd "<down>")   #'treemacs-next-line)
+             (define-key map (kbd "C-n")      #'treemacs-next-line)
+             (define-key map (kbd "<left>")   #'org-ol-tree-navigation--collapse-current)
+             (define-key map (kbd "C-b")      #'org-ol-tree-navigation--collapse-current)
+             (define-key map (kbd "<home>")   #'org-ol-tree-navigation--goto-root)
+             (define-key map (kbd "C-a")      #'org-ol-tree-navigation--goto-root)
+             (define-key map (kbd "<end>")    #'org-ol-tree-navigation--goto-last-opened-node)
+             (define-key map (kbd "C-e")      #'org-ol-tree-navigation--goto-last-opened-node)
+
+             ;; ignore treemacs bindings
+
+             (define-key map (kbd "<C-?>") 'ignore)
+             (define-key map (kbd "<M-UP>") 'ignore)
+             (define-key map (kbd "<M-DOWN>") 'ignore)
+             (define-key map (kbd "<M-!>") 'ignore)
+             (define-key map "\C-c\C-p" 'ignore)
+             (define-key map "\C-c\C-w" 'ignore)
+             (define-key map "\\!" 'ignore)
+             (define-key map "!" 'ignore)
+             (define-key map "?" 'ignore)
+             (define-key map "P" 'ignore)
+             (define-key map "R" 'ignore)
+             (define-key map "b" 'ignore)
+             (define-key map "c" 'ignore)
+             (define-key map "d" 'ignore)
+             (define-key map "gr" 'ignore)
+             (define-key map "m" 'ignore)
+             (define-key map "o" 'ignore)
+             (define-key map "r" 'ignore)
+             (define-key map "s" 'ignore)
+             (define-key map "t" 'ignore)
+             (define-key map "w" 'ignore)
+             (define-key map "y" 'ignore)
+             map))
+
+
+(when org-ol-tree-packages--evil-p
+  (evil-define-key '(normal treemacs) 'org-ol-tree-mode
+    "h" #'org-ol-tree-navigation--collapse-current
+    (kbd "<left>")   #'org-ol-tree-navigation--collapse-current
+    "l" #'org-ol-tree-navigation--expand-current
+    (kbd "<right>")  #'org-ol-tree-navigation--expand-current
+    "G" #'org-ol-tree-navigation--goto-last-opened-node
+    "gg" #'org-ol-tree-navigation--goto-root
+    "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
+    "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
+    "L" #'(lambda () (interactive) (evil-window-bottom) (goto-char (point-at-bol)))
+    "0" #'(lambda () (interactive) (goto-char (point-at-bol)))
+    "^" #'(lambda () (interactive) (goto-char (point-at-bol)))
+    "$" #'(lambda () (interactive) (goto-char (point-at-bol)))
+
+    ;; ignore treemacs bindings
+
+    (kbd "<C-?>") 'ignore
+    (kbd "<M-UP>") 'ignore
+    (kbd "<M-DOWN>") 'ignore
+    (kbd "<M-!>") 'ignore
+    "\C-c\C-p" 'ignore
+    "\C-c\C-w" 'ignore
+    "\\!" 'ignore
+    "!" 'ignore
+    "?" 'ignore
+    "P" 'ignore
+    "R" 'ignore
+    "b" 'ignore
+    "c" 'ignore
+    "d" 'ignore
+    "gr" 'ignore
+    "m" 'ignore
+    "o" 'ignore
+    "r" 'ignore
+    "s" 'ignore
+    "t" 'ignore
+    "w" 'ignore
+    "y" 'ignore))
 
 (provide 'org-ol-tree)
 ;;; org-ol-tree.el ends here
