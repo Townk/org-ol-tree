@@ -26,17 +26,22 @@
 (require 'seq)
 (require 'subr-x)
 
+(require 'all-the-icons nil 'noerror)
+(require 'evil nil 'noerror)
 
 
 ;;;; ---- Variables
 
 ;;; --- Constants ---------------------------------------------------------------
 
-(defconst org-ol-tree-packages--all-the-icons-p (require 'all-the-icons nil 'noerror)
+(defconst org-ol-tree-packages--all-the-icons-p (fboundp 'all-the-icons-material)
   "Constant indicating if package all-the-icons is installed.")
 
 
-(defconst org-ol-tree-packages--evil-p (require 'evil-core nil 'noerror)
+(defconst org-ol-tree-packages--evil-p (and (fboundp 'evil-define-key)
+                                            (fboundp 'evil-window-top)
+                                            (fboundp 'evil-window-middle)
+                                            (fboundp 'evil-window-bottom))
   "Constant indicating if package evil is installed.")
 
 
