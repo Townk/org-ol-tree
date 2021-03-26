@@ -67,8 +67,11 @@
       (expect (org-ol-tree-section-next '(3 nil 1) 1) :to-throw))))
 
 (describe "A heading structure"
+  :var (empty-heading)
   (it "should allow me to create an object with no slot values"
-    (expect (org-ol-tree-heading--create) :not :to-throw))
+    (expect (setq empty-heading (org-ol-tree-heading--create)) :not :to-throw)
+    (expect (org-ol-tree-heading-level empty-heading) :to-equal 0)
+    (expect (listp (org-ol-tree-heading-subheadings empty-heading)) :to-be-truthy))
 
   (describe "when creating it from a non org buffer"
     (it "should throw a user error with a non-org buffer message"

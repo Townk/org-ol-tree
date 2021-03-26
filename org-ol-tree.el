@@ -314,7 +314,7 @@ representing an entire org document."
   (marker nil
           :type marker
           :documentation "Location of this heading on its org file buffer.")
-  (level nil
+  (level 0
          :type number
          :documentation "The nested level for this org heading.")
   (parent nil
