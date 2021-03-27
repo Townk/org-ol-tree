@@ -8,14 +8,48 @@
 ;; Version: 0.0.1
 ;; Keywords: org, org-mode, outline, tree, tree-view, treeview, treemacs
 ;; Homepage: https://github.com/Townk/org-ol-tree
-;; Package-Requires: ((emacs "27.1") (org "9.5") (treemacs "2.8") (dash "2.18.1") (s "1.12.0") (seq) (cl-lib))
+;; Package-Requires: ((org "9.5") (treemacs "2.8") (dash "2.18.1") (s "1.12.0") (seq) (cl-lib))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
 ;;; Commentary:
 ;;
-;; TODO: Add a good description for the package that is not a copy
-;;       of the README.org file.
+;; For an overview information about the package with a quick start,
+;; installation and usages, refer to the README.org file distributed along with
+;; this file.
+;;
+;; This file is splitted into 8 major sections with each one having its own
+;; number of subsections. I chose this organization to force me to keep a good
+;; separation between the package major components.
+;;
+;; This is the list of all sections and its respective subsections:
+;;
+;; - Variables
+;;   - Private variables
+;;   - Configuration variables
+;; - System information
+;; - Outline elements
+;;   - Sections
+;;   - Headings
+;; - Outline visuals (UI)
+;;   - Icons
+;;   - Window
+;; - User interactions (Actions)
+;;   - Mouse interaction
+;;   - Navigation
+;; - Treemacs extension
+;; - Commands
+;; - Mode definition
+;;
+;; These sections are also used to separate their unit test files.
+;;
+;; Regarding namespacing, the package uses the `org-ol-tree' prefix as namespace
+;; and each section adds its own namespace to it. For instance, the section
+;; "System information", has the full namespace as `org-ol-tree-system'. The two
+;; exceptions to this rule are Sections and Heading that are actually
+;; subsections but got their very own namespace due to the fact thay are of
+;; higher importance in the package (and also because function names look better
+;; without the 'elements' prefix).
 ;;
 ;;; Code:
 
@@ -30,20 +64,7 @@
 (require 'evil nil 'noerror)
 
 
-;;;; ---- Variables
-
-;;; --- Constants ---------------------------------------------------------------
-
-(defconst org-ol-tree-packages--all-the-icons-p (fboundp 'all-the-icons-material)
-  "Constant indicating if package all-the-icons is installed.")
-
-
-(defconst org-ol-tree-packages--evil-p (and (fboundp 'evil-define-key)
-                                            (fboundp 'evil-window-top)
-                                            (fboundp 'evil-window-middle)
-                                            (fboundp 'evil-window-bottom))
-  "Constant indicating if package evil is installed.")
-
+;;;; --- Variables
 
 ;;; --- Private variables -------------------------------------------------------
 
@@ -73,7 +94,7 @@ To know how this variable is populated, check the `org-ol-tree-icons-theme'
 documentation.
 
 Never update this variable manually. It is intended to self-mutate when calling
-the `org-ol-tree-icons-update-theme' function.")
+the `org-ol-tree-visuals-update-icons-theme' function.")
 
 
 ;;; --- Configuration variables -------------------------------------------------
@@ -94,10 +115,10 @@ If this value is an integer greater or equal 1, the maximum size is the given
 value. If the option `org-ol-tree-window-use-pixel' is non nil, the given value
 is consider to be in pixels.
 
-If the given value does not fall into these two categories, its assumed you
-want the maximum width to be the size of the maximum available size. If it
-does, the value will also be capped between `window-min-width' and the maximum
-available size.")
+If the given value does not fall into these two categories, its assumed you want
+the maximum width to be the size of the maximum available size. If it does, the
+value will also be capped between `window-min-width' and the maximum available
+size.")
 
 
 (defvar org-ol-tree-window-min-width 0.2
@@ -107,13 +128,12 @@ If the value is a float between 0 and 1, the minimum width is given by
 multiplying this value and the maximum available size for the window.
 
 If this value is an integer greater or equal 1, the minimum size is the given
-value itself. If the option `org-ol-tree-window-use-pixel' is non nil, the
-given value is consider to be in pixels.
+value itself. If the option `org-ol-tree-window-use-pixel' is non nil, the given
+value is consider to be in pixels.
 
-If the given value does not fall into these two categories, its assumed you
-want the minimum width to be the size of `window-min-width'. If it does, the
-value will also be capped between `window-min-width' and the maximum available
-size.")
+If the given value does not fall into these two categories, its assumed you want
+the minimum width to be the size of `window-min-width'. If it does, the value
+will also be capped between `window-min-width' and the maximum available size.")
 
 
 (defvar org-ol-tree-window-use-pixel t
@@ -138,49 +158,7 @@ configuration for the outline window changes, or when use expands or collapses
 the nodes.")
 
 
-(defvar org-ol-tree-icons-theme-plist
-  (-non-nil
-   (append '()
-          (when org-ol-tree-packages--all-the-icons-p
-            (list 'all-the-icons `(:root ,(all-the-icons-material "description"
-                                                                  :height 0.95
-                                                                  :v-adjust -0.17)
-                                   :expanded ,(all-the-icons-material "keyboard_arrow_down"
-                                                                      :height 0.95
-                                                                      :v-adjust -0.17)
-                                   :collapsed ,(all-the-icons-material "chevron_right"
-                                                                       :height 0.95
-                                                                       :v-adjust -0.17)
-                                   :section "§ %(section)")))
-          (list 'unicode `(:root "■"  ; <-- this is bad! Accepting suggestions for a better one!
-                           :expanded "▾ "
-                           :collapsed "▸ "
-                           :section "§ %(section)")
-                'ascii `(:root "*"
-                         :expanded "- "
-                         :collapsed "+ "
-                         :section "%(section)"))
-          (when org-ol-tree-packages--all-the-icons-p
-            (list 'iconless-fancy `(:root ""
-                                    :expanded ,(all-the-icons-material "keyboard_arrow_down"
-                                                                       :height 0.95
-                                                                       :v-adjust -0.17)
-                                    :collapsed ,(all-the-icons-material "chevron_right"
-                                                                        :height 0.95
-                                                                        :v-adjust -0.17)
-                                    :section "")))
-          (list 'iconless-unicode `(:root ""
-                                    :expanded "▾ "
-                                    :collapsed "▸ "
-                                    :section "")
-                'iconless-ascii `(:root ""
-                                  :expanded "- "
-                                  :collapsed "+ "
-                                  :section "")
-                'iconless `(:root ""
-                            :expanded ""
-                            :collapsed ""
-                            :section ""))))
+(defvar org-ol-tree-icons-theme-plist (list)
   "A property list of property list representing all icon themes available.
 
 An icon theme is a simple property list with four entries:
@@ -195,8 +173,8 @@ An icon theme is a simple property list with four entries:
                 the outline;
 
 All icons are strings. The `:root', `:xpanded', and `collapsed' icons are
-displayed as the `display' property of a two-characters propertized string.
-This is done to guarantee the proper alignment of icons when using unicode or
+displayed as the `display' property of a two-characters propertized string. This
+is done to guarantee the proper alignment of icons when using unicode or
 all-the-icons icons.
 
 The `:section' icon is actually a simple one-line string where we replace the
@@ -214,15 +192,44 @@ The outline chooses the theme based on the following criteria:
 
 1) If this variable is not nil, and the symbol from it is one of the available
    themes, the theme indicated by the variable is used;
+
 2) If the Emacs frame is a graphical frame, and the package all-the-icons is
    installed and available, the theme `all-the-icons' is used;
-3) If the Emacs frame is a graphical frame, and the package all-the-icons is
-   NOT installed nor available, the theme `unicode' is used;
+
+3) If the Emacs frame is a graphical frame, and the package all-the-icons is NOT
+   installed nor available, the theme `unicode' is used;
+
 4) Fallback to the `ascii' theme;")
 
 
 
-;;;; ---- Outline elements
+;;;; --- System information
+
+;; Functions in this section are inline because I want to make sure the state
+;; returned by them is as accurate as possible.
+
+(defsubst org-ol-tree-system-all-the-icons-p ()
+  "Constant indicating if package all-the-icons is installed."
+  (fboundp 'all-the-icons-material))
+
+
+(defsubst org-ol-tree-system-evil-p ()
+  "Constant indicating if package evil is installed."
+  (and (fboundp 'evil-define-key)
+       (fboundp 'evil-window-top)
+       (fboundp 'evil-window-middle)
+       (fboundp 'evil-window-bottom)))
+
+(defsubst org-ol-tree-system-graphical-frame-p ()
+  "Return t if current frame is a GUI frame, nil otherwise.
+
+To find out if Emacs is running in GUI mode, we query the variable
+`window-system'."
+  (member window-system '(x w32 ns)))
+
+
+
+;;;; --- Core objects
 
 ;;; --- Sections ---------------------------------------------------------------
 
@@ -230,13 +237,13 @@ The outline chooses the theme based on the following criteria:
   "Return t when STACK-OR-STRING is a valid section object.
 
 If STACK-OR-STRING is a list, all its elements should be numbers representing
-individual numbers from a section id as on the reverse order do they appear.
-For instance, the section \"1.3.2 My section text\" would be represented as
-\(2 3 1) on the stack form.
+individual numbers from a section id as on the reverse order do they appear. For
+instance, the section \"1.3.2 My section text\" would be represented as (2 3 1)
+on the stack form.
 
-If STACK-OR-STRING is a string it should have only integers separated by
-dots as they would appear on a section heading. For instance, the same
-\"1.3.2 My section text\" heading is represented by the string \"1.3.2\"."
+If STACK-OR-STRING is a string it should have only integers separated by dots as
+they would appear on a section heading. For instance, the same \"1.3.2 My
+section text\" heading is represented by the string \"1.3.2\"."
   (and stack-or-string
        (or (and (stringp stack-or-string)
                 (string-match-p "^[0-9]+\\(\\.[0-9]+\\)*$" stack-or-string))
@@ -248,8 +255,8 @@ dots as they would appear on a section heading. For instance, the same
   "Convert a list of numbers into a section number string notation.
 
 This function does the conversion by transforming each element from
-SECTION-STACK into a string, reversing the list, and joining all elements with
-a '.' character.
+SECTION-STACK into a string, reversing the list, and joining all elements with a
+'.' character.
 
 Example::
   (org-ol-tree-section-stack-to-string '(3 2 1))
@@ -453,11 +460,11 @@ The root heading is cached on a buffer local variable"
 
 
 
-;;;; ---- Outline visuals (UI)
+;;;; --- Outline visuals (UI)
 
 ;;; --- Icons -------------------------------------------------------------------
 
-(defun org-ol-tree-icons-update-theme ()
+(defun org-ol-tree-visuals-update-icons-theme ()
   "Refresh `org-ol-tree-icons--selected-theme' values.
 
 To know how this function populate the `org-ol-tree-icons--selected-theme',
@@ -467,15 +474,14 @@ check the `org-ol-tree-icons-theme' variable documentation."
                    (cond
                     ((member org-ol-tree-icons-theme org-ol-tree-icons-theme-plist)
                      org-ol-tree-icons-theme)
-                    ((and (member window-system '(x w32 ns))
-                          org-ol-tree-packages--all-the-icons-p)
+                    ((and (org-ol-tree-system-graphical-frame-p)
+                          (org-ol-tree-system-all-the-icons-p))
                      'all-the-icons)
-                    ((member window-system '(x w32 ns))
+                    ((org-ol-tree-system-graphical-frame-p)
                      'unicode)
-                    (t 'ascii)))))
+                    (t 'assystem-feature)))))
 
-
-(defun org-ol-tree-icons-root-icon ()
+(defun org-ol-tree-visuals-root-icon ()
   "Return the string used as the icon for the root element."
   (let* ((root-icon (plist-get org-ol-tree-icons--selected-theme :root))
          (display-p (> (length root-icon) 0)))
@@ -485,16 +491,16 @@ check the `org-ol-tree-icons-theme' variable documentation."
      (when display-p " "))))
 
 
-(defun org-ol-tree-icons-section-icon (heading state)
+(defun org-ol-tree-visuals-section-icon (heading state)
   "Return the full icon for the giving HEADING.
 
-The icon depends on the icon theme configuration as well as the expandable
-state of HEADING.
+The icon depends on the icon theme configuration as well as the expandable state
+of HEADING.
 
 The STATE argument indicates if this icon should represent an open or closed
-node.Valid values for STATE are 'expanded,'collapsed, and nil. In practice,
-this function considers the state as 'collapsed for any value non nil and
-different than 'expanded."
+node.Valid values for STATE are 'expanded,'collapsed, and nil. In practice, this
+function considers the state as 'collapsed for any value non nil and different
+than 'expanded."
   (let ((expanded-icon (plist-get org-ol-tree-icons--selected-theme :expanded))
         (collapsed-icon (plist-get org-ol-tree-icons--selected-theme :collapsed))
         (section-icon (plist-get org-ol-tree-icons--selected-theme :section)))
@@ -512,23 +518,71 @@ different than 'expanded."
       'doom-themes-treemacs-file-face)))))
 
 
+;; I define the icon themes here because 1) this is the UI section and the Icons
+;; subsection, and 2) we want all functions related to icons to be defined
+;; before we define the actual icons.
+
+(setq org-ol-tree-icons-theme-plist
+      (-non-nil
+       (append '()
+               (when (org-ol-tree-system-all-the-icons-p)
+                 (list 'all-the-icons `(:root ,(all-the-icons-material "description"
+                                                                       :height 0.95
+                                                                       :v-adjust -0.17)
+                                        :expanded ,(all-the-icons-material "keyboard_arrow_down"
+                                                                           :height 0.95
+                                                                           :v-adjust -0.17)
+                                        :collapsed ,(all-the-icons-material "chevron_right"
+                                                                            :height 0.95
+                                                                            :v-adjust -0.17)
+                                        :section "§ %(section)")))
+               (list 'unicode `(:root "■"                 ; <-- I really don't like
+                                :expanded "▾ "            ;     this icon, please
+                                :collapsed "▸ "           ;     give me a better
+                                :section "§ %(section)")  ;     suggestion!
+                     'ascii `(:root "*"
+                              :expanded "- "
+                              :collapsed "+ "
+                              :section "%(section)"))
+               (when (org-ol-tree-system-all-the-icons-p)
+                 (list 'iconless-fancy `(:root ""
+                                         :expanded ,(all-the-icons-material "keyboard_arrow_down"
+                                                                            :height 0.95
+                                                                            :v-adjust -0.17)
+                                         :collapsed ,(all-the-icons-material "chevron_right"
+                                                                             :height 0.95
+                                                                             :v-adjust -0.17)
+                                         :section "")))
+               (list 'iconless-unicode `(:root ""
+                                         :expanded "▾ "
+                                         :collapsed "▸ "
+                                         :section "")
+                     'iconless-ascii `(:root ""
+                                       :expanded "- "
+                                       :collapsed "+ "
+                                       :section "")
+                     'iconless `(:root ""
+                                 :expanded ""
+                                 :collapsed ""
+                                 :section "")))))
+
 ;;; --- Window ------------------------------------------------------------------
 
-(defun org-ol-tree-window-use-pixel-p ()
+(defun org-ol-tree-visuals-use-pixel-p ()
   "Return t if the measurement unit should be pixels.
 
 This function takes in account the value of `org-ol-tree-window-use-pixel' and
 if this frame is a graphical frame or not."
-  (and (member window-system '(x w32 ns))
+  (and (org-ol-tree-system-graphical-frame-p)
        org-ol-tree-window-use-pixel))
 
 
-(defun org-ol-tree-window--resize (window target-width min-width max-width
-                                          total-width char-width pixelwise)
+(defun org-ol-tree-visuals--window-do-resize (window target-width min-width max-width
+                                                     total-width char-width pixelwise)
   "The actual resize function.
 
-This function is called by `org-ol-tree-window-resize' with all the calculated
-values in place to perform the window resizing.
+This function is called by `org-ol-tree-visuals-window-resize' with all the
+calculated values in place to perform the window resizing.
 
 The calculated values needed here are as follows:
 
@@ -553,7 +607,7 @@ The calculated values needed here are as follows:
       (setq-local org-ol-tree-window--current-width target-width))))
 
 
-(defun org-ol-tree-window-resize ()
+(defun org-ol-tree-visuals-window-resize ()
   "Adjust the window width to fit the outline content as much as possible.
 
 The adjustment respects the value of `org-ol-tree-window-max-width' (check its
@@ -564,7 +618,7 @@ The majority of the code in this function was copied from the Emacs function
   (with-selected-window (selected-window)
     (let* ((window (window-normalize-window (selected-window) t))
            (frame (window-frame window))
-           (pixelwise (org-ol-tree-window-use-pixel-p))
+           (pixelwise (org-ol-tree-visuals-use-pixel-p))
            (char-width (frame-char-width frame))
            (total-width (window-size window t pixelwise))
            (available-width (+ total-width
@@ -588,8 +642,10 @@ The majority of the code in this function was copied from the Emacs function
                               min-width)
                              ((integerp org-ol-tree-window-min-width)
                               (max org-ol-tree-window-min-width min-width))
-                             ((> org-ol-tree-window-max-width 1.0) min-width)
-                             (t (max (round (* org-ol-tree-window-min-width (float available-width)))
+                             ((> org-ol-tree-window-max-width 1.0)
+                              min-width)
+                             (t
+                              (max (round (* org-ol-tree-window-min-width (float available-width)))
                                      min-width))))
                  (min-width (max min-width org-ol-tree-window--current-width))
                  (width (+ (+ (car (window-text-pixel-size
@@ -601,18 +657,16 @@ The majority of the code in this function was copied from the Emacs function
                                  (window-body-width window pixelwise)))
                            (* char-width 2)))
                  (window-size-fixed nil))
-            (org-ol-tree-window--resize window width min-width max-width
-                                        total-width char-width pixelwise))
-        (org-ol-tree-window--resize window max-width max-width max-width
-                                    total-width char-width pixelwise)))))
+            (org-ol-tree-visuals--window-do-resize window width min-width max-width
+                                                   total-width char-width pixelwise))
+        (org-ol-tree-visuals--window-do-resize window max-width max-width max-width
+                                               total-width char-width pixelwise)))))
 
 
 
-;;;; ---- User interactions (Actions)
+;;;; --- Node actions
 
-;;; --- Mouse interaction -------------------------------------------------------
-
-(defun org-ol-tree-input--leftclick-action (event)
+(defun org-ol-tree-actions--leftclick (event)
   "Function used to perform a mouse click on a node.
 
 The action triggered by this function depends if the node is a leaf or an
@@ -625,16 +679,16 @@ prefix EVENT is passed on to the executed action, if possible."
     (cancel-timer org-ol-tree-input--debounce-timer))
 
   (setq org-ol-tree-input--debounce-timer
-        (run-with-idle-timer 0.1 nil #'org-ol-tree-input--expand-or-visit-current-node event)))
+        (run-with-idle-timer 0.1 nil #'org-ol-tree-actions--expand-or-visit event)))
 
 
-(defun org-ol-tree-input--expand-or-visit-current-node (event)
-  "Helper function called by `org-ol-tree-input--leftclick-action'.
+(defun org-ol-tree-actions--expand-or-visit (event)
+  "Helper function called by `org-ol-tree-actions--leftclick'.
 
 This function performs the actual action for the click operation.
 
 The argument EVENT, is the same event received by the
-`org-ol-tree-input--leftclick-action' function."
+`org-ol-tree-actions--leftclick' function."
   (setq org-ol-tree-input--debounce-timer nil)
 
   (when (eq 'mouse-1 (elt event 0))
@@ -654,14 +708,14 @@ The argument EVENT, is the same event received by the
              ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
              ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))
              ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))
-         (org-ol-tree-navigation--visit-current)))
+         (org-ol-tree-actions--visit)))
       (treemacs--evade-image))))
 
 
-(defun org-ol-tree-input--doubleclick-action (event)
+(defun org-ol-tree-actions--doubleclick (event)
   "Visit the clicked heading from EVENT.
 
-This function cancels any timer call from `org-ol-tree-input--leftclick-action'."
+This function cancels any timer call from `org-ol-tree-actions--leftclick'."
   (interactive "e")
 
   (when org-ol-tree-input--debounce-timer
@@ -674,18 +728,16 @@ This function cancels any timer call from `org-ol-tree-input--leftclick-action'.
     (goto-char (point-at-bol))
     (when (region-active-p)
       (keyboard-quit))
-    (org-ol-tree-navigation--visit-current)))
+    (org-ol-tree-actions--visit)))
 
 
-;;; --- Navigation --------------------------------------------------------------
-
-(defun org-ol-tree-navigation--goto-root ()
+(defun org-ol-tree-actions--goto-root ()
   "Move the cursor to the outline root node."
   (interactive)
   (treemacs-goto-node '(:custom "0")))
 
 
-(defun org-ol-tree-navigation--goto-last-opened-node ()
+(defun org-ol-tree-actions--goto-last-node ()
   "Move the cursor to the last opened node.
 
 If the last node on the tree is a parent node with several children, but its
@@ -695,11 +747,11 @@ state is collapsed, the parent not will be selected."
   (goto-char (point-at-bol)))
 
 
-(defun org-ol-tree-navigation--collapse-current ()
+(defun org-ol-tree-actions--collapse ()
   "Collapse an expandable section that is currently expanded.
 
-If the cursor is not on top of an expanded section, calling this function has
-no effect."
+If the cursor is not on top of an expanded section, calling this function has no
+effect."
   (interactive)
   (treemacs-with-current-button
    "No heading node found under the cursor"
@@ -708,11 +760,11 @@ no effect."
      ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section)))))
 
 
-(defun org-ol-tree-navigation--expand-current ()
+(defun org-ol-tree-actions--expand ()
   "Expand an expandable section that is currently collapsed.
 
-If the cursor is not on top of a collapsed section, calling this function has
-no effect."
+If the cursor is not on top of a collapsed section, calling this function has no
+effect."
   (interactive)
   (treemacs-with-current-button
    "No heading node found under the cursor"
@@ -721,15 +773,15 @@ no effect."
      ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))))
 
 
-(defun org-ol-tree-navigation--visit-current (&optional narrow-p &rest _)
+(defun org-ol-tree-actions--visit (&optional narrow-p &rest _)
   "Switch to the buffer saved in node at point.
 
 When this function is invoked with a prefix argument, NARROW-P is set to a
-non-nil value and it toggles the narrowed state. For instance, if your buffer
-is not narrowed, invoking this function with a prefix argument causes the
-selected section to get narrowed. From now on, subsequent calls of this feature
-narrow the selected section, until you call it with th universal argument
-again, which causes the buffer to get widen."
+non-nil value and it toggles the narrowed state. For instance, if your buffer is
+not narrowed, invoking this function with a prefix argument causes the selected
+section to get narrowed. From now on, subsequent calls of this feature narrow
+the selected section, until you call it with th universal argument again, which
+causes the buffer to get widen."
   (interactive "P")
 
   (if-let ((buffer (and (bound-and-true-p org-ol-tree--org-buffer)
@@ -762,24 +814,25 @@ again, which causes the buffer to get widen."
 
 
 
-;;;; ---- Treemacs extension
+;;;; --- Treemacs extension
 
-(org-ol-tree-icons-update-theme)
+(org-ol-tree-visuals-update-icons-theme)
 
 (treemacs-define-leaf-node org-ol-section 'dynamic-icon
-                           :ret-action #'org-ol-tree-navigation--visit-current
-                           :mouse1-action #'org-ol-tree-navigation--visit-current)
+                           :ret-action #'org-ol-tree-actions--visit
+                           :mouse1-action #'org-ol-tree-actions--visit)
 
 
 (treemacs-define-expandable-node org-ol-parent-section
-  :icon-open-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'expanded)
-  :icon-closed-form (org-ol-tree-icons-section-icon (treemacs-button-get node :heading) 'collapsed)
-  :ret-action 'org-ol-tree-navigation--visit-current
-  :after-expand (org-ol-tree-window-resize)
-  :after-collapse (org-ol-tree-window-resize)
+  :icon-open-form (org-ol-tree-visuals-section-icon (treemacs-button-get node :heading) 'expanded)
+  :icon-closed-form (org-ol-tree-visuals-section-icon (treemacs-button-get node :heading)
+                                                      'collapsed)
+  :ret-action 'org-ol-tree-actions--visit
+  :after-expand (org-ol-tree-visuals-window-resize)
+  :after-collapse (org-ol-tree-visuals-window-resize)
   :query-function (reverse (org-ol-tree-heading-subheadings (treemacs-button-get node :heading)))
   :render-action
-  (treemacs-render-node :icon (org-ol-tree-icons-section-icon item 'collapsed)
+  (treemacs-render-node :icon (org-ol-tree-visuals-section-icon item 'collapsed)
                         :label-form (org-ol-tree-heading-name item)
                         :state (if (org-ol-tree-heading-subheadings item)
                                    treemacs-org-ol-parent-section-closed-state
@@ -790,18 +843,18 @@ again, which causes the buffer to get widen."
 
 
 (treemacs-define-expandable-node org-ol-doc
-  :icon-open (org-ol-tree-icons-root-icon)
-  :icon-closed (org-ol-tree-icons-root-icon)
-  :ret-action 'org-ol-tree-navigation--visit-current
-  :after-expand (org-ol-tree-window-resize)
-  :after-collapse (org-ol-tree-window-resize)
+  :icon-open (org-ol-tree-visuals-root-icon)
+  :icon-closed (org-ol-tree-visuals-root-icon)
+  :ret-action 'org-ol-tree-actions--visit
+  :after-expand (org-ol-tree-visuals-window-resize)
+  :after-collapse (org-ol-tree-visuals-window-resize)
   :query-function (reverse (org-ol-tree-heading-subheadings (org-ol-tree-heading-root)))
   :top-level-marker t
   :root-face 'treemacs-root-face
   :root-key-form (org-ol-tree-heading-id (org-ol-tree-heading-root))
   :root-label (org-ol-tree-heading-name (org-ol-tree-heading-root))
   :render-action
-  (treemacs-render-node :icon (org-ol-tree-icons-section-icon item 'collapsed)
+  (treemacs-render-node :icon (org-ol-tree-visuals-section-icon item 'collapsed)
                         :label-form (org-ol-tree-heading-name item)
                         :state treemacs-org-ol-parent-section-closed-state
                         :key-form (org-ol-tree-heading-id item)
@@ -810,7 +863,7 @@ again, which causes the buffer to get widen."
 
 
 
-;;;; ---- Commands
+;;;; --- Commands
 
 ;;;###autoload
 (defun org-ol-tree/display-sections ()
@@ -839,30 +892,26 @@ the outline."
     (set-window-buffer nil (current-buffer))
     (treemacs-ORG-OL-DOC-extension)
     (treemacs-expand-org-ol-doc)
-    (add-hook 'window-configuration-change-hook 'org-ol-tree-window-resize nil t)
+    (add-hook 'window-configuration-change-hook 'org-ol-tree-visuals-window-resize nil t)
     (beginning-of-line)
     (org-ol-tree-mode 1)))
 
 
-;;;; ---- Mode definition
+;;;; --- Mode definition
 
 (define-minor-mode org-ol-tree-mode
   "Org Outline Tree mode."
   :keymap  (let ((map (make-sparse-keymap)))
-             (define-key map [mouse-1]        #'org-ol-tree-input--leftclick-action)
-             (define-key map [double-mouse-1] #'org-ol-tree-input--doubleclick-action)
-             (define-key map (kbd "<up>")     #'treemacs-previous-line)
-             (define-key map (kbd "C-p")      #'treemacs-previous-line)
-             (define-key map (kbd "<right>")  #'org-ol-tree-navigation--expand-current)
-             (define-key map (kbd "C-f")      #'org-ol-tree-navigation--expand-current)
-             (define-key map (kbd "<down>")   #'treemacs-next-line)
-             (define-key map (kbd "C-n")      #'treemacs-next-line)
-             (define-key map (kbd "<left>")   #'org-ol-tree-navigation--collapse-current)
-             (define-key map (kbd "C-b")      #'org-ol-tree-navigation--collapse-current)
-             (define-key map (kbd "<home>")   #'org-ol-tree-navigation--goto-root)
-             (define-key map (kbd "C-a")      #'org-ol-tree-navigation--goto-root)
-             (define-key map (kbd "<end>")    #'org-ol-tree-navigation--goto-last-opened-node)
-             (define-key map (kbd "C-e")      #'org-ol-tree-navigation--goto-last-opened-node)
+             (define-key map [mouse-1]        #'org-ol-tree-actions--leftclick)
+             (define-key map [double-mouse-1] #'org-ol-tree-actions--doubleclick)
+             (define-key map (kbd "<right>")  #'org-ol-tree-actions--expand)
+             (define-key map (kbd "C-f")      #'org-ol-tree-actions--expand)
+             (define-key map (kbd "<left>")   #'org-ol-tree-actions--collapse)
+             (define-key map (kbd "C-b")      #'org-ol-tree-actions--collapse)
+             (define-key map (kbd "<home>")   #'org-ol-tree-actions--goto-root)
+             (define-key map (kbd "C-a")      #'org-ol-tree-actions--goto-root)
+             (define-key map (kbd "<end>")    #'org-ol-tree-actions--goto-last-node)
+             (define-key map (kbd "C-e")      #'org-ol-tree-actions--goto-last-node)
 
              ;; ignore treemacs bindings
 
@@ -891,14 +940,16 @@ the outline."
              map))
 
 
-(when org-ol-tree-packages--evil-p
-  (evil-define-key '(normal treemacs) 'org-ol-tree-mode
-    "h" #'org-ol-tree-navigation--collapse-current
-    (kbd "<left>")   #'org-ol-tree-navigation--collapse-current
-    "l" #'org-ol-tree-navigation--expand-current
-    (kbd "<right>")  #'org-ol-tree-navigation--expand-current
-    "G" #'org-ol-tree-navigation--goto-last-opened-node
-    "gg" #'org-ol-tree-navigation--goto-root
+(when (org-ol-tree-system-evil-p)
+  (evil-define-key 'treemacs 'org-ol-tree-mode
+    "l"             #'org-ol-tree-actions--expand
+    (kbd "<right>") #'org-ol-tree-actions--expand
+    "h"             #'org-ol-tree-actions--collapse
+    (kbd "<left>")  #'org-ol-tree-actions--collapse
+    "gg"            #'org-ol-tree-actions--goto-root
+    (kbd "<home>")  #'org-ol-tree-actions--goto-root
+    "G"             #'org-ol-tree-actions--goto-last-node
+    (kbd "<end>")   #'org-ol-tree-actions--goto-last-node
     "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
     "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
     "L" #'(lambda () (interactive) (evil-window-bottom) (goto-char (point-at-bol)))

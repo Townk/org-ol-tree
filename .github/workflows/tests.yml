@@ -43,8 +43,8 @@ jobs:
           COVERALLS_PARALLEL: 1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cask install
-          cask exec buttercup -L . -L tests
+          make update
+          make test
 
   finalize:
     runs-on: ubuntu-latest

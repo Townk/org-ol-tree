@@ -1,4 +1,4 @@
-;;; test-section-functions.el --- tests for org-ol-tree section functions -*- lexical-binding: t; -*-
+;;; test-outline-core.el --- Sections and Headings tests -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2021 Thiago Alves
 ;;
@@ -6,6 +6,35 @@
 ;;
 ;;; Commentary:
 ;;
+;; This file contains all tests related to the outline elements (currently
+;; 'sections' and 'headings').
+;;
+;; Since reading the test might be tedious, I'm reproducing here the transcript
+;; of the behaviors being tested by this file:
+;;
+;; - A section
+;;   - should be a list of integers or a string of integers separated by a '.'
+;;   - when converting between list and string
+;;     - should convert a section stack into a string
+;;     - should return nil if the given object is not a section stack
+;;     - should convert a string into a section stack
+;;     - should return nil if trying to convert a malformed string into a section stack
+;;   - when calculating the next section
+;;     - should return the next section stack when creating a new section on a given level
+;;     - should throw an exception when trying to get next section from a non-section object
+;;
+;; - A heading structure
+;;   - should allow me to create an object with no slot values
+;;   - when creating it from a non org buffer
+;;     - should throw a user error with a non-org buffer message
+;;   - when creating it from an org buffer
+;;     - should raise an error if cursor is not ona heading
+;;     - when cursor is on a headline
+;;       - should return a heading object for the section
+;;       - should throw an error if the giving previous heading is not a valid heading
+;;       - should return a sibling heading when passing previous heading on same level
+;;       - should return a sub-heading when passing previous heading on lower level
+;;       - should return a heading when passing previous heading on higher level
 ;;
 ;;; Code:
 
@@ -141,5 +170,5 @@
         (expect (org-ol-tree-heading-level new-heading) :to-equal 1)))
     ))
 
-(provide 'test-helper-functions)
-;;; test-section-functions.el ends here
+(provide 'test-outline-core)
+;;; test-outline-core.el ends here
