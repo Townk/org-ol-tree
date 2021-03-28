@@ -34,9 +34,7 @@
 ;; - Outline visuals (UI)
 ;;   - Icons
 ;;   - Window
-;; - User interactions (Actions)
-;;   - Mouse interaction
-;;   - Navigation
+;; - Node actions
 ;; - Treemacs extension
 ;; - Commands
 ;; - Mode definition
@@ -895,6 +893,11 @@ the outline."
     (treemacs-expand-org-ol-doc)
     (add-hook 'window-configuration-change-hook 'org-ol-tree-visuals-window-resize nil t)
     (beginning-of-line)
+    (save-excursion
+      (read-only-mode -1)
+      (goto-char (point-max))
+      (insert "\n")
+      (read-only-mode 1))
     (org-ol-tree-mode 1)))
 
 

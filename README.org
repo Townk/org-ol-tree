@@ -7,7 +7,7 @@ This package offers an Org mode outline window that does not use indirect buffer
 Currently this is on its infancy and it may or may not have a bright future. This means that this package will not make into MELPA before it reaches some level of maturity.
 
 #+attr_html: :alt  :align center :class img :width 1000
-#+attr_org: :width 900
+#+attr_org: :width 800
 [[./assets/screenshot.png]]
 
 In this pre-alpha release, this package can display all headlines as an outline tree on the right side of the frame. You can press =[enter]= to scroll your buffer to the selected heading, or you can use the universal prefix before pressing =[enter]= to have your buffer narrowed to the selected heading.
@@ -17,8 +17,8 @@ This is a list of features I want to implement before doing a proper release of 
 - Promote or demote a heading from the outline;
 - Move headings up and down;
 - Rename headings from the outline;
-- Have a configuration for the window position;
-- Add default keybindings for Vanilla Emacs and Evil;
+- +Have a configuration for the window position+;
+- +Add default keybindings for Vanilla Emacs and Evil+;
 
 And this is a list of features I want to have in this package but I don't want to commit to it right away:
 
@@ -30,9 +30,9 @@ And this is a list of features I want to have in this package but I don't want t
 
 There are also two features I really want but I don't know how to implement them:
 
-- Auto resize the outline's window according to the length of its headings.
+- +Auto resize the outline's window according to the length of its headings+.
 
-  If I was to implement this feature just for users of fixed width fonts, it would be a breeze to get this done, but I dimply don't know how to /measure/ a string with a given font on Emacs! If you know how to do it, ping me!
+  +If I was to implement this feature just for users of fixed width fonts, it would be a breeze to get this done, but I dimply don't know how to /measure/ a string with a given font on Emacs! If you know how to do it, ping me!+ *Update*: this feature is live on =main=.
 
 - Add support for TODO items in the outline.
 
