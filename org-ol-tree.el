@@ -391,33 +391,6 @@ this functions raises a user error."
     this-heading))
 
 
-(defun org-ol-tree-heading-current ()
-  "Return the heading object for the tree node under the cursor.
-
-If cursor is outside a heading node, return nil."
-  (treemacs-with-current-button
-   "No heading node found under the cursor"
-   (or (treemacs-button-get current-btn :heading)
-       (when (= (line-number-at-pos) 1) (org-ol-tree-heading-root)))))
-
-
-(defun org-ol-tree-heading-root-label ()
-  "Return a string label for the outline root node.
-
-The label is given by the title on the target buffer if one is defined, by the
-file name of the target buffer transformed to title case, if the target buffer
-has a file associated with it, or by the target's buffer name transformed to
-title case."
-  (save-excursion
-    (goto-char (point-min))
-    (cond
-     ((re-search-forward "^#\\+TITLE:[ \t]*\\([^\n]+\\)" nil t)
-      (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
-     ((buffer-file-name)
-      (s-titleized-words (file-name-base (buffer-file-name))))
-     (t (s-titleized-words (buffer-name))))))
-
-
 (defun org-ol-tree-heading-root-build (&optional buffer-or-name)
   "Traverse BUFFER-OR-NAME buffer to create a tree-like structure for headings.
 
@@ -448,6 +421,23 @@ an Org buffer, raises a `user-error'."
             root))))))
 
 
+(defun org-ol-tree-heading-root-label ()
+  "Return a string label for the outline root node.
+
+The label is given by the title on the target buffer if one is defined, by the
+file name of the target buffer transformed to title case, if the target buffer
+has a file associated with it, or by the target's buffer name transformed to
+title case."
+  (save-excursion
+    (goto-char (point-min))
+    (cond
+     ((re-search-forward "^#\\+TITLE:[ \t]*\\([^\n]+\\)" nil t)
+      (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
+     ((buffer-file-name)
+      (s-titleized-words (file-name-base (buffer-file-name))))
+     (t (s-titleized-words (buffer-name))))))
+
+
 (defun org-ol-tree-heading-root ()
   "Return the root heading for the outline in the current window.
 
@@ -455,8 +445,19 @@ The root heading is cached on a buffer local variable"
   (unless (and (bound-and-true-p org-ol-tree-heading--root) (not org-ol-tree-heading--root-dirt-p))
     (when (bound-and-true-p org-ol-tree--org-buffer)
       (setq-local org-ol-tree-heading--root
-                  (org-ol-tree-heading-root-build org-ol-tree--org-buffer))))
+                  (org-ol-tree-heading-root-build org-ol-tree--org-buffer))
+      (setq-local org-ol-tree-heading--root-dirt-p nil)))
   org-ol-tree-heading--root)
+
+
+(defun org-ol-tree-heading-current ()
+  "Return the heading object for the tree node under the cursor.
+
+If cursor is outside a heading node, return nil."
+  (treemacs-with-current-button
+   "No heading node found under the cursor"
+   (or (treemacs-button-get current-btn :heading)
+       (when (= (line-number-at-pos) 1) (org-ol-tree-heading-root)))))
 
 
 

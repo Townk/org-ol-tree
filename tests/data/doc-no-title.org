@@ -1,0 +1,2 @@
+* Headline 1
+This sample data has no ~#+TITLE:~ property to validate =org-ol-tree= can handle the document title without it.
