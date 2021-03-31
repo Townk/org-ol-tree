@@ -23,6 +23,7 @@ jobs:
       matrix:
         emacs_version:
           - 27.1
+          - 27.2
           
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -39,12 +40,16 @@ jobs:
 
       - name: Test
         env:
-          COVERALLS_FLAG_NAME: Emacs ${{ matrix.emacs_version }}
-          COVERALLS_PARALLEL: 1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CODECOV_TOKEN: e4cd40cc-11f1-4088-ac9b-5c77a72a50eb
         run: |
           make update
           make test
+
+      - name: Generating code coverage
+        uses: actions/upload-artifact@master
+        with:
+          name: coverage-final.json
+          path: ./coverage-final.json
 
   finalize:
     runs-on: ubuntu-latest
@@ -52,4 +57,14 @@ jobs:
     needs: test
 
     steps:
-      - run: curl "https://coveralls.io/webhook?repo_name=$GITHUB_REPOSITORY&repo_token=${{ secrets.GITHUB_TOKEN }}" -d "payload[build_num]=$GITHUB_RUN_NUMBER&payload[status]=done"
+      - name: Downloading code coverage data
+        uses: actions/download-artifact@master
+        with:
+          name: coverage-final.json
+          path: ./coverage-final.json
+
+      - name: Upload to CodeCov
+        env:
+          CODECOV_TOKEN: e4cd40cc-11f1-4088-ac9b-5c77a72a50eb
+        run: |
+          bash <(curl -s https://codecov.io/bash)

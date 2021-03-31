@@ -42,10 +42,7 @@
 ;;
 ;;; Code:
 
-(when (require 'undercover nil t)
-  (undercover "org-ol-tree.el"))
-
-(setq lexical-binding t)
+(load-file "./tests/undercover-init.el")
 
 (require 'org-ol-tree)
 (require 'buttercup)

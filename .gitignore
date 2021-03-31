@@ -79,4 +79,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
+# Code coverage
+/coverage
+coverage-final.json
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,emacs

@@ -63,8 +63,7 @@
 ;;
 ;;; Code:
 
-(when (require 'undercover nil t)
-  (undercover "org-ol-tree.el"))
+(load-file "./tests/undercover-init.el")
 
 (require 'org-ol-tree)
 (require 'buttercup)
