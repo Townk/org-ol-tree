@@ -210,12 +210,18 @@
 
 
   (describe "when getting it from the outline buffer"
+    :var (heading)
+
+    (before-each
+      (spy-on 'org-ol-tree-core--current-node :and-return-value 2)
+      (spy-on 'get-text-property :and-return-value 'current-heading))
+
     (it "should retrieve the heading by getting the :heading property of the button"
-      (spy-on 'get-text-property :and-return-value nil)
+      (setq heading (org-ol-tree-core--heading-current))
 
-      (org-ol-tree-core--heading-current)
-
-      (expect 'get-text-property :to-have-been-called-with nil :heading))))
+      (expect 'org-ol-tree-core--current-node :to-have-been-called-times 1)
+      (expect 'get-text-property :to-have-been-called-with 2 :heading)
+      (expect heading :to-be 'current-heading))))
 
 
 

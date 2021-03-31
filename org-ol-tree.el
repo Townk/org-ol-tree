@@ -271,33 +271,27 @@ The outline chooses the theme based on the following criteria:
 
 ;;;; --- System information
 
-;; Functions in this section are inline because I want to make sure the state
-;; returned by them is as accurate as possible.
-
-(define-inline org-ol-tree-system--all-the-icons-p ()
+(defun org-ol-tree-system--all-the-icons-p ()
   "Constant indicating if package all-the-icons is installed."
   (declare (side-effect-free t))
-  (inline-quote
-   (fboundp 'all-the-icons-material)))
+  (fboundp 'all-the-icons-material))
 
 
-(define-inline org-ol-tree-system--evil-p ()
+(defun org-ol-tree-system--evil-p ()
   "Constant indicating if package evil is installed."
   (declare (side-effect-free t))
-  (inline-quote
-   (and (fboundp 'evil-define-key)
+  (and (fboundp 'evil-define-key)
         (fboundp 'evil-window-top)
         (fboundp 'evil-window-middle)
-        (fboundp 'evil-window-bottom))))
+        (fboundp 'evil-window-bottom)))
 
-(define-inline org-ol-tree-system--graphical-frame-p ()
+(defun org-ol-tree-system--graphical-frame-p ()
   "Return t if current frame is a GUI frame, nil otherwise.
 
 To find out if Emacs is running in GUI mode, we query the variable
 `window-system'."
   (declare (side-effect-free t))
-  (inline-quote
-   (member window-system '(x w32 ns))))
+  (member window-system '(x w32 ns)))
 
 
 
@@ -384,7 +378,8 @@ Examples::
 ;;; --- Headings ---------------------------------------------------------------
 
 (cl-defstruct (org-ol-tree-core--heading (:constructor org-ol-tree-core--heading-create-internal)
-                                   (:copier nil))
+                                         (:copier nil)
+                                         :noinline)
   "The Org Outline Tree heading structure.
 
 It has the basic information to build and draw a tree-like structure
@@ -409,7 +404,7 @@ representing an entire org document."
                :documentation "A collection of children headings."))
 
 
-(cl-defun org-ol-tree-core--heading-create (&optional previous-heading)
+(defun org-ol-tree-core--heading-create (&optional previous-heading)
   "Create a new `org-ol-tree-core--heading' from `point' on current org buffer.
 
 If PREVIOUS-HEADING is non nil, this function creates the new heading as a
@@ -463,13 +458,17 @@ this functions raises a user error."
     this-heading))
 
 
-(define-inline org-ol-tree-core--heading-current ()
+(defun org-ol-tree-core--current-node ()
+  "Wrapper function around `treemacs-current-button' to allow mocks."
+  (treemacs-current-button))
+
+
+(defun org-ol-tree-core--heading-current ()
   "Return the heading object for the tree node under the cursor.
 
 If cursor is outside a heading node, return nil."
   (declare (side-effect-free t))
-  (inline-quote
-     (get-text-property (treemacs-current-button) :heading)))
+  (get-text-property (org-ol-tree-core--current-node) :heading))
 
 
 ;;; --- Document ---------------------------------------------------------------
@@ -554,7 +553,7 @@ check the `org-ol-tree-ui-icon-set' variable documentation."
                      'all-the-icons)
                     ((org-ol-tree-system--graphical-frame-p)
                      'unicode)
-                    (t 'assystem-feature)))))
+                    (t 'ascii)))))
 
 
 (defun org-ol-tree-ui--doc-icon ()
@@ -563,7 +562,7 @@ check the `org-ol-tree-ui-icon-set' variable documentation."
          (display-p (> (length doc-icon) 0)))
     (concat
      " "
-     (when display-p (propertize "--" 'face 'treemacs-root-face 'display doc-icon))
+     (when display-p (propertize doc-icon 'face 'treemacs-root-face))
      (when display-p " "))))
 
 
@@ -583,9 +582,8 @@ than 'expanded."
   (concat
    " "
    (if (org-ol-tree-core--heading-subheadings heading)
-       (propertize "--"
-                   'face 'doom-themes-treemacs-file-face
-                   'display (if (eq state 'expanded) expanded-icon collapsed-icon))
+       (propertize (if (eq state 'expanded) expanded-icon collapsed-icon)
+                   'face 'doom-themes-treemacs-file-face)
      "  ")
    (when (> (length section-icon) 0)
      (propertize
@@ -645,38 +643,35 @@ than 'expanded."
 
 ;;; --- Window ------------------------------------------------------------------
 
-(define-inline org-ol-tree-ui--get-window ()
+(defun org-ol-tree-ui--get-window ()
   "Return the window displaying the org-ol-tree buffer for the current org file.
 
 Returns nil if no org-ol-tree buffer is visible."
   (declare (side-effect-free error-free))
-  (inline-quote
-   (if org-ol-tree--buffer-p
-       (selected-window)
-     (when (buffer-live-p org-ol-tree--buffer)
-       (get-buffer-window org-ol-tree--buffer)))))
+  (if org-ol-tree--buffer-p
+      (selected-window)
+    (when (buffer-live-p org-ol-tree--buffer)
+      (get-buffer-window org-ol-tree--buffer))))
 
 
-(define-inline org-ol-tree-ui--visibility ()
+(defun org-ol-tree-ui--visibility ()
   "Return whether the current visibility state of the org-ol-tree buffer.
 Valid states are 'visible, 'exists and 'none."
   (declare (side-effect-free t))
-  (inline-quote
-   (cond
-    ((org-ol-tree-ui--get-window) 'visible)
-    ((buffer-live-p org-ol-tree--buffer) 'exists)
-    (t 'none))))
+  (cond
+   ((org-ol-tree-ui--get-window) 'visible)
+   ((buffer-live-p org-ol-tree--buffer) 'exists)
+   (t 'none)))
 
 
-(define-inline org-ol-tree-ui--use-pixel-p ()
+(defun org-ol-tree-ui--use-pixel-p ()
   "Return t if the measurement unit should be pixels.
 
 This function takes in account the value of `org-ol-tree-ui-window-use-pixel'
 and if this frame is a graphical frame or not."
   (declare (side-effect-free t))
-  (inline-quote
-   (and (org-ol-tree-system--graphical-frame-p)
-        org-ol-tree-ui-window-use-pixel)))
+  (and (org-ol-tree-system--graphical-frame-p)
+        org-ol-tree-ui-window-use-pixel))
 
 
 (defun org-ol-tree-ui--window-resize-internal (window target-width min-width max-width
