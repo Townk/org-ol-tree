@@ -1,4 +1,11 @@
-
+;;; undercover-init.el --- Initialization code for coverage information -*- lexical-binding: t; -*-
+;;
+;; Copyright (C) 2021 Thiago Alves
+;;
+;; This file is not part of GNU Emacs.
+;;
+;;; Commentary:
+;;
 ;;; Code:
 
 (if (getenv "CODECOV_TOKEN")

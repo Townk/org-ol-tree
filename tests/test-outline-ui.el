@@ -43,145 +43,12 @@
 ;;; Code:
 
 (load-file "./tests/undercover-init.el")
+(load-file "./tests/buttercup-matchers.el")
 
 (require 'org-ol-tree)
 (require 'buttercup)
 (require 's)
 (require 'seq)
-
-(defconst test-root-dir (expand-file-name "tests"))
-
-(defun tests-text-expr-and-value-no-property (fun)
-  "Alternative implementation of `buttercup--expr-and-value'.
-
-As with `buttercup--expr-and-value', given FUN, return its quoted expression and
-value. The difference here, is the value returned will get all its text
-properties removed with the `substring-no-properties' function."
-  (cons (buttercup--enclosed-expr fun)
-        (substring-no-properties (funcall fun))))
-
-
-(buttercup-define-matcher :to-start-with (text prefix &optional ignore-case)
-  (cl-destructuring-bind
-      ((text-expr . text) (prefix-expr . prefix))
-      (mapcar #'tests-text-expr-and-value-no-property (list text prefix))
-    (let* ((ignore-case-p (when ignore-case (funcall ignore-case)))
-           (actual-start (s-left (length prefix) text))
-           (matches-p (s-starts-with-p prefix text ignore-case-p))
-           (spec (format-spec-make
-                  ?T (format "%S" text-expr)
-                  ?e (format "%S" prefix-expr)
-                  ?a (format "%S" actual-start))))
-      (cond
-       ((and ignore-case-p matches-p)
-        (cons t (buttercup-format-spec
-                 "Expected `%T' to ignore case and not to start with `%e', but it did."
-                 spec)))
-       ((and (not ignore-case-p) matches-p)
-        (cons t (buttercup-format-spec
-                 "Expected `%T' not to start exactly with `%e', but it did."
-                 spec)))
-       ((and ignore-case-p (not matches-p))
-        (cons nil (buttercup-format-spec
-                   (concat
-                    "Expected `%T' to start with `%e' ignoring case, "
-                    "but `%a' was in the beginning of the text.")
-                   spec)))
-       (t (cons nil (buttercup-format-spec
-                     (concat
-                      "Expected `%T' to start exactly with `%e', "
-                      "but `%a' was in the beginning of the text.")
-                 spec)))))))
-
-
-(buttercup-define-matcher :to-end-with (text sufix &optional ignore-case)
-  (cl-destructuring-bind
-      ((text-expr . text) (sufix-expr . sufix))
-      (mapcar #'tests-text-expr-and-value-no-property (list text sufix))
-    (let* ((ignore-case-p (when ignore-case (funcall ignore-case)))
-           (actual-end (s-right (length sufix) text))
-           (matches-p (s-ends-with-p sufix text ignore-case-p))
-           (spec (format-spec-make
-                  ?T (format "%S" text-expr)
-                  ?e (format "%S" sufix-expr)
-                  ?a (format "%S" actual-end))))
-      (cond
-       ((and ignore-case-p matches-p)
-        (cons t (buttercup-format-spec
-                 "Expected `%T' to ignore case and not to end with `%e', but it did."
-                 spec)))
-       ((and (not ignore-case-p) matches-p)
-        (cons t (buttercup-format-spec
-                 "Expected `%T' not to end exactly with `%e', but it did."
-                 spec)))
-       ((and ignore-case-p (not matches-p))
-        (cons nil (buttercup-format-spec
-                   (concat
-                    "Expected `%T' to end with `%e' ignoring case, "
-                    "but `%a' was in the beginning of the text.")
-                   spec)))
-       (t (cons nil (buttercup-format-spec
-                     (concat
-                      "Expected `%T' to end exactly with `%e', "
-                      "but `%a' was in the beginning of the text.")
-                 spec)))))))
-
-
-(buttercup-define-matcher :to-have-length-greater-than (text length)
-  (cl-destructuring-bind
-      ((text-expr . text) (length-expr . length))
-      (mapcar #'buttercup--expr-and-value (list text length))
-    (let* ((length-actual (length text))
-           (spec (format-spec-make
-                  ?T (format "%S" text-expr)
-                  ?l (format "%S" length-expr)
-                  ?a (format "%S" length-actual))))
-      (if (> (length text) length)
-          (cons t (buttercup-format-spec
-                   "Expected `%T' to have a length of at most `%l', but the length was `%a'."
-                   spec))
-        (cons nil (buttercup-format-spec
-                   "Expected `%T' to have a length greater than `%l', but the length was `%a'."
-                   spec))))))
-
-
-(buttercup-define-matcher :to-have-the-exact-keys (plist keys)
-  (cl-destructuring-bind
-      ((plist-expr . plist) (keys-expr . keys))
-      (mapcar #'buttercup--expr-and-value (list plist keys))
-      (let* ((plist-unique-keys (list))
-             (keys-unique-keys (list))
-             spec)
-        (cl-loop for (key _) on plist by (function cddr) do
-                 (unless (member key keys)
-                   (push key plist-unique-keys)))
-        (cl-loop for (key) on keys do
-                 (unless (plist-member plist key)
-                   (push key keys-unique-keys)))
-        (setq spec (format-spec-make
-                    ?L (format "%S" plist-expr)
-                    ?l (format "%S" plist)
-                    ?K (format "%S" keys-expr)
-                    ?k (format "%S" keys)
-                    ?p (format "%S" plist-unique-keys)
-                    ?y (format "%S" keys-unique-keys)))
-        (cond
-         ((and plist-unique-keys keys-unique-keys)
-          (cons nil (buttercup-format-spec
-                     "Expected `%L' to contain only the keys `%k', but `%y' are missing and `%p' are present unexpectedly."
-                     spec)))
-         (plist-unique-keys
-          (cons nil (buttercup-format-spec
-                     "Expected `%L' to contain only the keys `%k', but `%p' are present unexpectedly."
-                     spec)))
-         (keys-unique-keys
-          (cons nil (buttercup-format-spec
-                     "Expected `%L' to contain only the keys `%k', but `%y' are missing."
-                     spec)))
-         (t
-          (cons t (buttercup-format-spec
-                   "Expected `%L' not to have none of the keys `%k'"
-                   spec)))))))
 
 
 (describe "Icons:"
@@ -350,8 +217,62 @@ properties removed with the `substring-no-properties' function."
 
 
 
-(describe "Window"
-  )
+(describe "Window:"
+
+  (before-each
+    (setq-default split-width-threshold 0
+                  split-height-threshold 0
+                  window-min-width 0
+                  window-min-height 0))
+
+
+  (describe "Given an Org file,"
+    :var (org-buffer current-window ol-window header)
+
+    (before-each
+      (find-file (expand-file-name "data/doc-happy-path.org" test-root-dir))
+      (setq org-buffer (current-buffer)))
+
+    (it "it should not have any Outline window associated with it"
+      (expect (org-ol-tree-ui--visibility) :to-be 'none))
+
+
+    (describe "when requesting to open the Outline window,"
+
+      (before-each
+        (call-interactively 'org-ol-tree))
+
+      (it "it should focus on the Outline window"
+        (expect org-ol-tree--buffer-p :to-be-truthy))
+
+      (it "the cursor should be located on the root header"
+        (setq header ()))
+
+
+      (describe "and checking the Outline visibility,"
+
+        (before-each
+          (select-window (get-buffer-window org-ol-tree--org-buffer)))
+
+        (it "it should be 'visible"
+          (expect (org-ol-tree-ui--visibility) :to-be 'visible)))
+
+
+      (describe "and closing the outline window,"
+
+        (before-each
+          (delete-window))
+
+        (it "the focus should move back to Org file"
+          (expect org-ol-tree--buffer-p :not :to-be-truthy))
+
+        (it "the Outline visibility should be 'exist"
+          (expect (org-ol-tree-ui--visibility) :to-be 'exists)))
+      )
+
+
+
+    ))
 
 
 

@@ -81,6 +81,11 @@
 (require 'evil nil 'noerror)
 
 
+;;;; --- Faces
+
+
+
+
 ;;;; --- Variables
 
 ;; After reading about sections in this file and their respective namespaces,
@@ -211,10 +216,15 @@ configuration for the outline window changes, or when use expands or collapses
 the nodes.")
 
 
-(defvar org-ol-tree-ui-window-header-decoration t
-  "Indicate if the org-ol-tree window should have a decorative header.
+(defvar org-ol-tree-ui-window-header-format "☰ Outline"
+  "Control the Outline Header's appearance.
 
-Possible values for this variable are nil and t.")
+If this variable is nil, org-ol-tree won't display a header on
+the outline window. If its value is a string, the string will
+show up in the header. If th value is a function, before
+displaying the header, org-ol-tree evaluates the function and
+uses the result as header. This result must be in the format
+required by `modeline' and `headerline'")
 
 
 (defvar org-ol-tree-ui-icon-set-list (list)
@@ -556,35 +566,57 @@ check the `org-ol-tree-ui-icon-set' variable documentation."
                     (t 'ascii)))))
 
 
+(defun org-ol-tree-ui--use-fancy-icons-p ()
+  "Return t if the selected icon set is one of the `all-the-icons' set."
+  (and (org-ol-tree-system--graphical-frame-p)
+       (org-ol-tree-system--all-the-icons-p)
+       (or (not org-ol-tree-ui-icon-set)
+           (member org-ol-tree-ui-icon-set '(all-the-icons iconless-fancy)))))
+
+
+(defun org-ol-tree-ui--expand-collapse-icon (heading state)
+  "Return the string used for the collapse or expand symbol on sections.
+
+If the HEADING used to get this icon does not have sub-sections, this function
+returns two white spaces used to align with the collapsable headings.
+
+The STATE argument indicates if this icon should represent an open or closed
+node.Valid values for STATE are 'expanded,'collapsed, and nil. In practice, this
+function considers the state as 'collapsed for any value non nil and different
+than 'expanded."
+  (if (org-ol-tree-core--heading-subheadings heading)
+      (let ((expanded-icon (plist-get org-ol-tree-ui--icon-set :expanded))
+            (collapsed-icon (plist-get org-ol-tree-ui--icon-set :collapsed)))
+        (if (org-ol-tree-ui--use-fancy-icons-p)
+            (propertize "--"
+                        'face 'doom-themes-treemacs-file-face
+                        'display (if (eq state 'expanded) expanded-icon collapsed-icon))
+          (propertize (if (eq state 'expanded) expanded-icon collapsed-icon)
+                      'face 'doom-themes-treemacs-file-face)))
+    "  "))
+
+
 (defun org-ol-tree-ui--doc-icon ()
   "Return the string used as the icon for the root element."
   (let* ((doc-icon (plist-get org-ol-tree-ui--icon-set :root))
          (display-p (> (length doc-icon) 0)))
     (concat
      " "
-     (when display-p (propertize doc-icon 'face 'treemacs-root-face))
+     (when display-p (if (org-ol-tree-ui--use-fancy-icons-p)
+                         (propertize "--" 'face 'treemacs-root-face 'display doc-icon)
+                       (propertize doc-icon 'face 'treemacs-root-face)))
      (when display-p " "))))
 
 
 (defun org-ol-tree-ui--section-icon (heading state)
   "Return the full icon for the giving HEADING.
 
-The icon depends on the icon theme configuration as well as the expandable state
-of HEADING.
-
-The STATE argument indicates if this icon should represent an open or closed
-node.Valid values for STATE are 'expanded,'collapsed, and nil. In practice, this
-function considers the state as 'collapsed for any value non nil and different
-than 'expanded."
-  (let ((expanded-icon (plist-get org-ol-tree-ui--icon-set :expanded))
-        (collapsed-icon (plist-get org-ol-tree-ui--icon-set :collapsed))
-        (section-icon (plist-get org-ol-tree-ui--icon-set :section)))
+The icon depends on the icon theme configuration as well as the given STATE
+of the HEADING."
+  (let ((section-icon (plist-get org-ol-tree-ui--icon-set :section)))
   (concat
    " "
-   (if (org-ol-tree-core--heading-subheadings heading)
-       (propertize (if (eq state 'expanded) expanded-icon collapsed-icon)
-                   'face 'doom-themes-treemacs-file-face)
-     "  ")
+   (org-ol-tree-ui--expand-collapse-icon heading state)
    (when (> (length section-icon) 0)
      (propertize
       (format "%s " (s-replace "%(section)" (org-ol-tree-core--heading-id heading) section-icon))
@@ -643,6 +675,19 @@ than 'expanded."
 
 ;;; --- Window ------------------------------------------------------------------
 
+(defun org-ol-tree-ui--setup-window (create-window)
+  "Display the Outline buffer on a side window.
+
+If CREATE-WINDOW is a non nil value, this function creates a side window and
+displays the Outline buufer into it."
+  (if (not create-window)
+      (select-window (get-buffer-window org-ol-tree--buffer))
+    (-> org-ol-tree--buffer
+      (display-buffer-in-side-window `((side . ,org-ol-tree-ui-window-position)))
+      (select-window)
+      (set-window-dedicated-p t))))
+
+
 (defun org-ol-tree-ui--get-window ()
   "Return the window displaying the org-ol-tree buffer for the current org file.
 
@@ -674,34 +719,84 @@ and if this frame is a graphical frame or not."
         org-ol-tree-ui-window-use-pixel))
 
 
-(defun org-ol-tree-ui--window-resize-internal (window target-width min-width max-width
-                                                      total-width char-width pixelwise)
-  "The actual resize function.
+(defun org-ol-tree-ui--window-system-min-width (window char-width pixelwise)
+  "Return real minimal width for WINDOW.
 
-This function is called by `org-ol-tree-ui--window-resize' with all the
-calculated values in place to perform the window resizing.
+If PIXELWISE is non nil, this function uses CHAR-WIDTH to calculate the minimal
+width in pixels.
 
-The calculated values needed here are as follows:
+The real minimal width is given by the variable `window-min-width' and the
+function `window-min-size' (which can potentially differ), whichever is bigger."
+  (max (if pixelwise (* char-width window-min-width) window-min-width)
+       (window-min-size window nil window pixelwise)))
 
-- WINDOW: The window where the resize should happen;
-- TARGET-WIDTH: The desired width for the window;
-- MIN-WIDTH: The lower bound constraint for the window width;
-- MAX-WIDTH: The higher bound constraint for the window width;
-- TOTAL-WIDTH: The total available width to increase the window;
-- CHAR-WIDTH: The width of a character on the current face of current frame;
-- PIXELWISE: Indicates if the resize should happen in pixels (t value) or
-  columns (nil value)"
-  (unless pixelwise
-    (setq target-width (/ (+ target-width char-width -1) char-width)))
 
-  (setq target-width (max min-width (min max-width target-width)))
+(defun org-ol-tree-ui--window-min-width (available-width system-min-width)
+  "Return the minimum possible width for window.
 
-  (unless (= target-width total-width)
+This function uses AVAILABLE-WIDTH and SYSTEM-MIN-WIDTH to calculate the
+minimum width from `org-ol-tree-ui-window-min-width'.
+
+For mor information on SYSTEM-MIN-WIDTH check
+`org-ol-tree-ui--window-system-min-width' documentation."
+  (cond
+   ((<= org-ol-tree-ui-window-min-width 0) system-min-width)
+   ((integerp org-ol-tree-ui-window-min-width)
+    (max org-ol-tree-ui-window-min-width system-min-width))
+   ((> org-ol-tree-ui-window-max-width 1.0) system-min-width)
+   (t (max (round (* org-ol-tree-ui-window-min-width (float available-width)))
+           system-min-width))))
+
+
+(defun org-ol-tree-ui--window-max-width (available-width)
+  "Return the maximum possible width for window.
+
+This function uses AVAILABLE-WIDTH as the maximum size the window can take in
+the frame when `org-ol-tree-ui-window-max-width' is a ration rather then a
+number."
+  (cond
+   ((<= org-ol-tree-ui-window-max-width 0) available-width)
+   ((integerp org-ol-tree-ui-window-max-width) (min org-ol-tree-ui-window-max-width
+                                                    available-width))
+   ((>= org-ol-tree-ui-window-max-width 1) available-width)
+   (t (min (round (* org-ol-tree-ui-window-max-width (float available-width)))
+           available-width))))
+
+
+(defun org-ol-tree-ui--window-required-width (window current-width pixelwise)
+  "Calculates the minimal width of WINDOW to display its entire buffer.
+
+This function uses the CURRENT-WIDTH to calculate WINDOW's fringes, margins,
+scroll bars, and its right divider, if any. If PIXELWISE is non nil, this
+calculation uses pixels instead of characters."
+  (+ (car (window-text-pixel-size window
+                                  (window-start window) nil
+                                  (frame-pixel-width (window-frame window)) nil))
+     (- current-width (window-body-width window pixelwise))))
+
+
+(defun org-ol-tree-ui--window-pad-width (width char-width pixelwise)
+  "Return WIDTH with the necessary padding for the Outline.
+
+This function uses the given CHAR-WIDTH to pad its width.
+
+If PIXELWISE is non nil, this calculation uses pixels instead of characters."
+  (let ((width (+ width (* char-width 2))))
+    (if pixelwise
+        width
+      (/ (+ width char-width -1) char-width))))
+
+
+(defun org-ol-tree-ui--window-perform-resize (window current-width new-width pixelwise)
+  "Adjust the size of WINDOW to NEW-WIDTH if it's different than CURRENT-WIDTH.
+
+If PIXELWISE is non nil, perform the resize using pixels instead of characters."
+  (unless (= new-width current-width)
     (window-preserve-size window t)
     (window-resize-no-error
-     window (- target-width total-width) t window pixelwise)
+     window (- new-width current-width) t window pixelwise)
     (when org-ol-tree-ui-window-increase-only
-      (setq-local org-ol-tree-ui--window-width target-width))))
+      (setq-local org-ol-tree-ui--window-width new-width))))
 
 
 (defun org-ol-tree-ui--window-resize ()
@@ -712,53 +807,26 @@ its documentation for more details).
 
 The majority of the code in this function was copied from the Emacs function
 `fit-window-to-buffer'."
-  (with-selected-window (selected-window)
-    (let* ((window (window-normalize-window (selected-window) t))
-           (frame (window-frame window))
-           (pixelwise (org-ol-tree-ui--use-pixel-p))
-           (char-width (frame-char-width frame))
-           (total-width (window-size window t pixelwise))
-           (available-width (+ total-width
-                               (window-max-delta window t window nil t nil pixelwise)))
-           (max-width (cond
-                       ((<= org-ol-tree-ui-window-max-width 0)
-                        available-width)
-                       ((integerp org-ol-tree-ui-window-max-width)
-                        (min org-ol-tree-ui-window-max-width available-width))
-                       ((> org-ol-tree-ui-window-max-width 1) available-width)
-                       (t (min (round (* org-ol-tree-ui-window-max-width (float available-width)))
-                               available-width)))))
-      (if org-ol-tree-ui-window-auto-resize
-          (let* ((char-height (frame-char-height frame))
-                 (min-width (max (if pixelwise
-                                     (* char-width window-min-width)
-                                   window-min-width)
-                                 (window-min-size window nil window pixelwise)))
-                 (min-width (cond
-                             ((<= org-ol-tree-ui-window-min-width 0)
-                              min-width)
-                             ((integerp org-ol-tree-ui-window-min-width)
-                              (max org-ol-tree-ui-window-min-width min-width))
-                             ((> org-ol-tree-ui-window-max-width 1.0)
-                              min-width)
-                             (t
-                              (max (round (* org-ol-tree-ui-window-min-width
-                                             (float available-width)))
-                                     min-width))))
-                 (min-width (max min-width org-ol-tree-ui--window-width))
-                 (width (+ (+ (car (window-text-pixel-size
-                                    window (window-start window) nil
-                                    (frame-pixel-width (window-frame window))
-                                    (* (window-body-height window pixelwise)
-                                       (if pixelwise 1 char-height))))
-                              (- total-width
-                                 (window-body-width window pixelwise)))
-                           (* char-width 2)))
-                 (window-size-fixed nil))
-            (org-ol-tree-ui--window-resize-internal window width min-width max-width
-                                                   total-width char-width pixelwise))
-        (org-ol-tree-ui--window-resize-internal window max-width max-width max-width
-                                               total-width char-width pixelwise)))))
+  (let* ((pixelwise (org-ol-tree-ui--use-pixel-p))
+         (char-width (frame-char-width))
+         (window (window-normalize-window (selected-window) t))
+         (current-width (window-size window t pixelwise))
+         (max-delta (window-max-delta window t window nil t nil pixelwise))
+         (available-width (+ current-width max-delta))
+         (system-min-width (org-ol-tree-ui--window-system-min-width window char-width pixelwise))
+         (max-width (org-ol-tree-ui--window-max-width available-width))
+         (min-width (org-ol-tree-ui--window-min-width available-width system-min-width))
+         (min-width (max min-width org-ol-tree-ui--window-width))
+         (required-width (org-ol-tree-ui--window-required-width window current-width pixelwise))
+         (required-width (org-ol-tree-ui--window-pad-width required-width char-width pixelwise))
+         (target-width (max min-width (min max-width required-width)))
+         (window-size-fixed nil))
+    (org-ol-tree-ui--window-perform-resize window
+                                           current-width
+                                           (if org-ol-tree-ui-window-auto-resize
+                                               target-width
+                                             max-width)
+                                           pixelwise)))
 
 
 ;;; --- Buffer ------------------------------------------------------------------
@@ -767,8 +835,7 @@ The majority of the code in this function was copied from the Emacs function
   "Retrieve or create an org-ol-tree buffer with NAME for current Org buffer."
   (if (buffer-live-p org-ol-tree--buffer)
       org-ol-tree--buffer
-    (setq-local org-ol-tree--buffer
-                (get-buffer-create (format "%s:%s*" org-ol-tree-ui--buffer-prefix name)))))
+    (get-buffer-create (format "%s:%s*" org-ol-tree-ui--buffer-prefix name))))
 
 
 (defun org-ol-tree-ui--setup-buffer ()
@@ -777,20 +844,20 @@ The majority of the code in this function was copied from the Emacs function
            (org-buffer-p (eq major-mode 'org-mode))
            (buffer (org-ol-tree-ui--get-buffer-create (buffer-name))))
       (progn
-        (-> buffer
-          (display-buffer-in-side-window `((side . ,org-ol-tree-ui-window-position)))
-          (select-window))
-        (set-window-dedicated-p (selected-window) t)
-        (unless org-ol-tree--buffer-p
-          (treemacs-initialize)
-          (setq-local org-ol-tree--org-buffer origin-buffer
-                      org-ol-tree--buffer-p t
-                      treemacs--width-is-locked nil
-                      window-size-fixed nil
-                      org-ol-tree-ui--window-width 0)
-          (setq header-line-format (when org-ol-tree-ui-window-header-decoration '("☰ Outline")))
-          (with-current-buffer origin-buffer
-            (setq-local org-ol-tree--buffer buffer))))
+        (setq-local org-ol-tree--buffer buffer)
+        (with-current-buffer buffer
+            (unless org-ol-tree--buffer-p
+              (treemacs-initialize)
+              (setq-local org-ol-tree--org-buffer origin-buffer
+                          org-ol-tree--buffer-p t
+                          treemacs--width-is-locked nil
+                          window-size-fixed nil
+                          org-ol-tree-ui--window-width 0)
+              (setq header-line-format (when org-ol-tree-ui-window-header-format
+                                         (if (functionp org-ol-tree-ui-window-header-format)
+                                             (funcall org-ol-tree-ui-window-header-format)
+                                           `(,org-ol-tree-ui-window-header-format))))
+              (org-ol-tree-mode 1))))
     (error "Can't use Org Outline Tree on non-Org buffers")))
 
 
@@ -914,6 +981,46 @@ effect."
      ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))))
 
 
+(defun org-ol-tree-action--move-to (target-point)
+  "Move the cursor to TARGET-POINT and scroll point to top.
+
+If the buffer is narrowed, it will get widen as a side effect of this function."
+  (widen)
+  (goto-char target-point)
+  (org-reveal)
+  (org-show-entry)
+  (recenter (min (max 0 scroll-margin) (truncate (/ (window-body-height) 4.0))) t))
+
+
+(defun org-ol-tree-action--narrow-buffer-maybe (perform-narrrowing narrowed-p)
+  "Narrow current Org buffer according to PERFORM-NARRROWING and NARROWED-P."
+  (when (or (and (not perform-narrrowing) narrowed-p)
+            (and perform-narrrowing (not narrowed-p)))
+    (org-narrow-to-subtree)))
+
+
+(defun org-ol-tree-action--focus-on-heading (narrow-p)
+  "Focus this Org buffer on the current heading.
+
+If NARROW-P is non nil, it toggles the narrowed state. For instance, if your
+buffer is not narrowed, invoking this function with a prefix argument causes
+the selected section to get narrowed. From now on, subsequent calls of this
+feature narrow the selected section, until you call it with th universal
+argument again, which causes the buffer to get widen."
+  (when-let ((buffer (and (buffer-live-p org-ol-tree--org-buffer)
+                          org-ol-tree--org-buffer))
+             (doc-window (or (get-buffer-window org-ol-tree--org-buffer)
+                             (next-window)))
+             (heading (org-ol-tree-core--heading-current))
+             (heading-marker (org-ol-tree-core--heading-marker heading)))
+        (select-window doc-window)
+        (switch-to-buffer buffer)
+        (let ((current-narrow (buffer-narrowed-p)))
+          (org-ol-tree-action--move-to heading-marker)
+          (org-ol-tree-action--narrow-buffer-maybe narrow-p current-narrow)
+          t)))
+
+
 (defun org-ol-tree-action--visit (&optional narrow-p &rest _)
   "Switch to the buffer saved in node at point.
 
@@ -925,34 +1032,14 @@ the selected section, until you call it with th universal argument again, which
 causes the buffer to get widen."
   (interactive "P")
 
-  (if-let ((buffer (and (buffer-live-p org-ol-tree--org-buffer)
-                        org-ol-tree--org-buffer))
-           (doc-window (or (get-buffer-window org-ol-tree--org-buffer)
-                           (next-window)))
-           (heading (org-ol-tree-core--heading-current))
-           (heading-marker (org-ol-tree-core--heading-marker heading)))
-      (progn
-        (select-window doc-window)
-        (switch-to-buffer buffer)
-        (let ((narrow-p (or (and (not narrow-p) (buffer-narrowed-p))
-                            (and narrow-p (not (buffer-narrowed-p))))))
-          (widen)
-          (goto-char heading-marker)
-          (org-reveal)
-          (org-show-entry)
-          (recenter (min (max 0 scroll-margin)
-                         (truncate (/ (window-body-height) 4.0)))
-                    t)
-          (when narrow-p
-            (org-narrow-to-subtree))
-          (when (or (not org-ol-tree-action-move-to-target) org-ol-tree-action-close-on-selected)
-            (select-window (org-ol-tree-ui--get-window))
-            (when org-ol-tree-action-close-on-selected
-              (org-ol-tree-quit)))
-          (when (eq (org-ol-tree-ui--visibility) 'visible)
-            (treemacs-pulse-on-success))
-          t))
-    (user-error "No section information found on current point")))
+  (unless (org-ol-tree-action--focus-on-heading narrow-p)
+    (user-error "No section information found on current point"))
+
+  (when (or (not org-ol-tree-action-move-to-target) org-ol-tree-action-close-on-selected)
+          (select-window (org-ol-tree-ui--get-window))
+          (when org-ol-tree-action-close-on-selected
+            (org-ol-tree-quit)))
+        (treemacs-pulse-on-success))
 
 
 
@@ -1099,28 +1186,23 @@ causes the buffer to get widen."
 
 (defun org-ol-tree--init()
   "Initialize an org-ol-tree for the current Org buffer."
-  (let ((visibility (org-ol-tree-ui--visibility)))
-    (pcase visibility
-      ('visible (select-window (get-buffer-window org-ol-tree--buffer)))
-      ('exists (org-ol-tree-ui--setup-buffer))
-      ('none
-       (org-ol-tree-ui--setup-buffer)
-       (org-ol-tree-mode 1)
+  (org-ol-tree-ui--setup-buffer)
+  (org-ol-tree-ui--setup-window t)
 
-       (treemacs-ORG-OL-DOC-extension)
-       (treemacs-expand-org-ol-doc)
-       (save-excursion
-         (read-only-mode -1)
-         (add-text-properties (point-at-bol)
-                              (point-at-eol)
-                              (list :heading org-ol-tree-core--DOM))
-         (goto-char (point-max))
-         (insert "\n")
-         (read-only-mode 1))
+  (treemacs-ORG-OL-DOC-extension)
+  (treemacs-expand-org-ol-doc)
+  (save-excursion
+    (read-only-mode -1)
+    (add-text-properties (point-at-bol)
+                         (point-at-eol)
+                         (list :heading org-ol-tree-core--DOM))
+    (goto-char (point-max))
+    (insert "\n")
+    (read-only-mode 1))
 
-       (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
+  (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
 
-       (beginning-of-line)))))
+  (beginning-of-line))
 
 
 ;;;###autoload
@@ -1137,15 +1219,20 @@ causes the buffer to get widen."
   (unless (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer) (eq major-mode 'org-mode))
     (user-error "Org Outline Tree can only be used with Org buffers"))
   (pcase (org-ol-tree-ui--visibility)
-    ('visible (if org-ol-tree--buffer-p
-                  (delete-window (org-ol-tree-ui--get-window))
-                (select-window (get-buffer-window org-ol-tree--buffer))))
-    ('exists  (org-ol-tree-ui--setup-buffer))
-    ('none    (org-ol-tree--init))))
+    ('visible
+     (if org-ol-tree--buffer-p
+         (delete-window (org-ol-tree-ui--get-window))
+       (org-ol-tree-ui--setup-window nil)))
+    ('exists
+     (org-ol-tree-ui--setup-buffer)
+     (org-ol-tree-ui--setup-window t))
+    ('none
+     (org-ol-tree--init))))
 
 
 (defun org-ol-tree-quit (&optional arg)
   "Quit org-ol-tree with `bury-buffer'.
+
 With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
   (interactive "P")
   (when (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer))
