@@ -83,6 +83,22 @@
 
 ;;;; --- Faces
 
+(defface org-ol-tree-document-face
+  '((t :inherit treemacs-root-face))
+  "Face used by org-ol-tree to display the root node."
+  :group 'org-ol-tree-faces)
+
+
+(defface org-ol-tree-section-title-face
+  '((t :inherit font-lock-doc-face))
+  "Face used by org-ol-tree to display section titles."
+  :group 'org-ol-tree-faces)
+
+
+(defface org-ol-tree-section-id-face
+  '((t :inherit treemacs-file-face))
+  "Face used by org-ol-tree to display section titles."
+  :group 'org-ol-tree-faces)
 
 
 
@@ -589,10 +605,10 @@ than 'expanded."
             (collapsed-icon (plist-get org-ol-tree-ui--icon-set :collapsed)))
         (if (org-ol-tree-ui--use-fancy-icons-p)
             (propertize "--"
-                        'face 'doom-themes-treemacs-file-face
+                        'face 'org-ol-tree-section-title-face
                         'display (if (eq state 'expanded) expanded-icon collapsed-icon))
           (propertize (if (eq state 'expanded) expanded-icon collapsed-icon)
-                      'face 'doom-themes-treemacs-file-face)))
+                      'face 'org-ol-tree-section-title-face)))
     "  "))
 
 
@@ -603,8 +619,8 @@ than 'expanded."
     (concat
      " "
      (when display-p (if (org-ol-tree-ui--use-fancy-icons-p)
-                         (propertize "--" 'face 'treemacs-root-face 'display doc-icon)
-                       (propertize doc-icon 'face 'treemacs-root-face)))
+                         (propertize "--" 'face 'org-ol-tree-document-face 'display doc-icon)
+                       (propertize doc-icon 'face 'org-ol-tree-document-face)))
      (when display-p " "))))
 
 
@@ -621,7 +637,7 @@ of the HEADING."
      (propertize
       (format "%s " (s-replace "%(section)" (org-ol-tree-core--heading-id heading) section-icon))
       'face
-      'doom-themes-treemacs-file-face)))))
+      'org-ol-tree-section-title-face)))))
 
 
 ;; I define the icon themes here because 1) this is the UI section and the Icons
@@ -1068,7 +1084,7 @@ causes the buffer to get widen."
                                    treemacs-org-ol-parent-section-closed-state
                                  treemacs-org-ol-section-state)
                         :key-form (org-ol-tree-core--heading-id item)
-                        :face 'treemacs-file-face
+                        :face 'org-ol-tree-section-id-face
                         :more-properties (:heading item)))
 
 
@@ -1080,7 +1096,7 @@ causes the buffer to get widen."
   :after-collapse (org-ol-tree-ui--window-resize)
   :query-function (reverse (org-ol-tree-core--heading-subheadings (org-ol-tree-core--doc)))
   :top-level-marker t
-  :root-face 'treemacs-root-face
+  :root-face 'org-ol-tree-document-face
   :root-key-form (org-ol-tree-core--heading-id (org-ol-tree-core--doc))
   :root-label (org-ol-tree-core--heading-name (org-ol-tree-core--doc))
   :render-action
@@ -1088,7 +1104,7 @@ causes the buffer to get widen."
                         :label-form (org-ol-tree-core--heading-name item)
                         :state treemacs-org-ol-parent-section-closed-state
                         :key-form (org-ol-tree-core--heading-id item)
-                        :face 'treemacs-file-face
+                        :face 'org-ol-tree-section-id-face
                         :more-properties (:heading item)))
 
 
