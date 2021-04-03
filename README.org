@@ -1,6 +1,6 @@
 #+TITLE:Org Outline Tree
 
-[[https://img.shields.io/badge/emacs-27.1%20%7C%2027.2-blueviolet]] [[https://github.com/Townk/org-ol-tree/blob/main/LICENSE][http://img.shields.io/badge/license-MIT-brightgreen.svg]] [[https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml][https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml/badge.svg]] [[https://codecov.io/gh/Townk/org-ol-tree][https://codecov.io/gh/Townk/org-ol-tree/branch/main/graph/badge.svg?token=XL88FR24XT]]
+[[https://github.com/Townk/org-ol-tree/blob/main/LICENSE][http://img.shields.io/badge/license-MIT-brightgreen.svg]] [[https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml][https://github.com/Townk/org-ol-tree/actions/workflows/tests.yml/badge.svg]] [[https://codecov.io/gh/Townk/org-ol-tree][https://codecov.io/gh/Townk/org-ol-tree/branch/main/graph/badge.svg?token=XL88FR24XT]]
 
 This package offers an Org mode outline window that does not use indirect buffers.
 

@@ -8,17 +8,15 @@
 ;;
 ;;; Code:
 
+(require 'undercover)
+(setq undercover-force-coverage t)
 (if (getenv "CODECOV_TOKEN")
-    (when (require 'undercover nil t)
-      (setq undercover-force-coverage t)
-      (undercover "org-ol-tree.el"
-                  (:report-format 'codecov)
-                  (:send-report nil)))
-  (when (require 'undercover nil t)
-    (mkdir "coverage" t)
-    (setq undercover-force-coverage t)
     (undercover "org-ol-tree.el"
-                (:report-format 'simplecov)
-                (:send-report nil))))
+                (:report-file "./coverage-final.json")
+                (:report-format 'codecov)
+                (:send-report nil))
+  (undercover "org-ol-tree.el"
+              (:report-file nil)
+              (:report-format 'text)))
 
 ;;; undercover-init.el ends here

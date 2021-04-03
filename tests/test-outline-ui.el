@@ -233,6 +233,9 @@
       (find-file (expand-file-name "data/doc-happy-path.org" test-root-dir))
       (setq org-buffer (current-buffer)))
 
+    (after-each
+      (kill-buffer org-buffer))
+
     (it "it should not have any Outline window associated with it"
       (expect (org-ol-tree-ui--visibility) :to-be 'none))
 
@@ -251,8 +254,8 @@
 
       (describe "and checking the Outline visibility,"
 
-        (before-each
-          (select-window (get-buffer-window org-ol-tree--org-buffer)))
+        ;; (before-each
+        ;;   (select-window (get-buffer-window org-ol-tree--org-buffer)))
 
         (it "it should be 'visible"
           (expect (org-ol-tree-ui--visibility) :to-be 'visible)))
@@ -267,12 +270,7 @@
           (expect org-ol-tree--buffer-p :not :to-be-truthy))
 
         (it "the Outline visibility should be 'exist"
-          (expect (org-ol-tree-ui--visibility) :to-be 'exists)))
-      )
-
-
-
-    ))
+          (expect (org-ol-tree-ui--visibility) :to-be 'exists))))))
 
 
 
