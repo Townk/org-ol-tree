@@ -304,6 +304,13 @@ The outline chooses the theme based on the following criteria:
   "String prefixing all org-ol-tree buffers.")
 
 
+(defconst org-ol-tree-core--heading-re
+  (concat "\\(.*\\)[[:blank:]]+"
+          "\\(\\[[[:digit:]]*[[:blank:]]*/[[:blank:]]*[[:digit:]]*[[:blank:]]*\\]\\)"
+          "[[:blank:]]*$")
+  "Regular expression to match an Org headline.")
+
+
 
 ;;;; --- System information
 
@@ -413,6 +420,16 @@ Examples::
 
 ;;; --- Headings ---------------------------------------------------------------
 
+(defun org-ol-tree-heading--split-progress (text)
+  "Return a cons cell with heading title and progress mark.
+
+TEXT is the full heading title where this function will search for the progress
+mark ([/])."
+  (if (string-match org-ol-tree-core--heading-re text)
+      `(,(s-trim (match-string 1 text)) . ,(s-trim (match-string 2 text)))
+    `(,text . nil)))
+
+
 (cl-defstruct (org-ol-tree-core--heading (:constructor org-ol-tree-core--heading-create-internal)
                                          (:copier nil)
                                          :noinline)
@@ -423,6 +440,9 @@ representing an entire org document."
   (name nil
         :type string
         :documentation "The org heading text with no decorations.")
+  (progress nil
+            :type string
+            :documentation "A string indicating progress on this heading tasks.")
   (id nil
       :type string
       :documentation "A string representing the section number.")
@@ -465,6 +485,9 @@ this functions raises a user error."
                         (org-ol-tree-core--heading-id previous-heading)))
          (this-components (org-heading-components))
          (this-name (nth 4 this-components))
+         (this-name (org-ol-tree-heading--split-progress this-name))
+         (this-progress (cdr this-name))
+         (this-name (car this-name))
          (this-level (nth 0 this-components))
          (this-marker (point-marker))
          (this-parent (cond
@@ -485,10 +508,11 @@ this functions raises a user error."
          (this-section-stack (org-ol-tree-core--next-section previous-id this-level))
          (this-section-id (org-ol-tree-core--section-string this-section-stack))
          (this-heading (org-ol-tree-core--heading-create-internal :name this-name
-                                                    :id this-section-id
-                                                    :marker this-marker
-                                                    :level this-level
-                                                    :parent this-parent)))
+                                                                  :progress this-progress
+                                                                  :id this-section-id
+                                                                  :marker this-marker
+                                                                  :level this-level
+                                                                  :parent this-parent)))
     (when this-parent
       (push this-heading (org-ol-tree-core--heading-subheadings this-parent)))
     this-heading))
@@ -1112,6 +1136,30 @@ causes the buffer to get widen."
         (treemacs-pulse-on-success))
 
 
+(defun org-ol-tree-action-rename-node (&optional heading new-title)
+  "Rename HEADING to NEW-TITLE.
+
+If the cursor is on top of the root node, the rename will change thee document
+title."
+  (interactive
+   (let ((heading (org-ol-tree-core--heading-current))
+         (cfrs-frame-parameters (list :width (window-size (selected-window) t))))
+     (list heading (cfrs-read "Title: " (org-ol-tree-core--heading-name heading)))))
+  (let ((current-name (org-ol-tree-core--heading-name heading))
+        (marker (org-ol-tree-core--heading-marker heading))
+        (progreess (org-ol-tree-core--heading-progress heading)))
+    (when (not (equal current-name new-title))
+      (with-current-buffer org-ol-tree--org-buffer
+        (save-excursion
+          (goto-char marker)
+          (org-edit-headline (concat
+                              new-title
+                              (when progreess
+                                (format " %s" progreess))))))
+      (setf (org-ol-tree-core--heading-name heading) new-title)
+      (org-ol-tree-action-refresh t))))
+
+
 (defun org-ol-tree-action-refresh (&optional prevent-rebuild)
   "Refresh the Outline tree.
 
@@ -1234,6 +1282,7 @@ without refreshing the base data."
              (define-key map (kbd "<end>")    #'org-ol-tree-action--goto-last-node)
              (define-key map (kbd "C-e")      #'org-ol-tree-action--goto-last-node)
              (define-key map "q"              #'org-ol-tree-quit)
+             (define-key map "R"              #'org-ol-tree-action-rename-node)
              (define-key map "r"              #'org-ol-tree-action-refresh)
 
 
@@ -1249,7 +1298,6 @@ without refreshing the base data."
              (define-key map "!" 'ignore)
              (define-key map "?" 'ignore)
              (define-key map "P" 'ignore)
-             (define-key map "R" 'ignore)
              (define-key map "b" 'ignore)
              (define-key map "c" 'ignore)
              (define-key map "d" 'ignore)
@@ -1274,6 +1322,7 @@ without refreshing the base data."
     "G"             #'org-ol-tree-action--goto-last-node
     (kbd "<end>")   #'org-ol-tree-action--goto-last-node
     "q" #'org-ol-tree-quit
+    "R" #'org-ol-tree-action-rename-node
     "r" #'org-ol-tree-action-refresh
     "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
     "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
@@ -1294,7 +1343,6 @@ without refreshing the base data."
     "!" 'ignore
     "?" 'ignore
     "P" 'ignore
-    "R" 'ignore
     "b" 'ignore
     "c" 'ignore
     "d" 'ignore
