@@ -243,15 +243,14 @@ configuration for the outline window changes, or when use expands or collapses
 the nodes.")
 
 
-(defvar org-ol-tree-ui-window-header-format "☰ Outline"
+(defvar org-ol-tree-ui-window-header-format '("  ☰ Outline")
   "Control the Outline Header's appearance.
 
-If this variable is nil, org-ol-tree won't display a header on
-the outline window. If its value is a string, the string will
-show up in the header. If th value is a function, before
-displaying the header, org-ol-tree evaluates the function and
-uses the result as header. This result must be in the format
-required by `modeline' and `headerline'")
+If this variable is nil, org-ol-tree won't display a header on the outline
+window. If its value should be the same type accepted by `modeline' and
+`headerline', or a function. If th value is a function, before displaying the
+header, org-ol-tree evaluates the function and uses the result as header. This
+result must be in the format required by `modeline' and `headerline'")
 
 
 (defvar org-ol-tree-ui-icon-set-list (list)
@@ -881,10 +880,9 @@ The majority of the code in this function was copied from the Emacs function
                           treemacs--width-is-locked nil
                           window-size-fixed nil
                           org-ol-tree-ui--window-width 0)
-              (setq header-line-format (when org-ol-tree-ui-window-header-format
-                                         (if (functionp org-ol-tree-ui-window-header-format)
-                                             (funcall org-ol-tree-ui-window-header-format)
-                                           `(,org-ol-tree-ui-window-header-format))))
+              (setq header-line-format (if (functionp org-ol-tree-ui-window-header-format)
+                                           (funcall org-ol-tree-ui-window-header-format)
+                                         org-ol-tree-ui-window-header-format))
               (org-ol-tree-mode 1))))
     (error "Can't use Org Outline Tree on non-Org buffers")))
 
