@@ -8,7 +8,7 @@
 ;; Version: 0.0.1
 ;; Keywords: org, org-mode, outline, tree, tree-view, treeview, treemacs
 ;; Homepage: https://github.com/Townk/org-ol-tree
-;; Package-Requires: ((org "9.5") (treemacs "2.8") (dash "2.18.1") (s "1.12.0") (seq) (cl-lib))
+;; Package-Requires: ((org "9.5") (treemacs "2.8") (dash "2.18.1") (s "1.12.0") (ht "2.3") (cfrs "1.5.4") (seq) (cl-lib))
 ;;
 ;; This file is not part of GNU Emacs.
 ;;
@@ -70,12 +70,15 @@
 ;;
 ;;; Code:
 
-(require 'org)
-(require 'treemacs)
+(require 'cfrs)
+(require 'cl-lib)
 (require 'dash)
+(require 'ht)
+(require 'org)
 (require 's)
 (require 'seq)
 (require 'subr-x)
+(require 'treemacs)
 
 (require 'all-the-icons nil 'noerror)
 (require 'evil nil 'noerror)
@@ -159,6 +162,14 @@ documentation.
 
 Never update this variable manually. It is intended to self-mutate when calling
 the `org-ol-tree-ui--update-icon-set' function.")
+
+
+(defvar org-ol-tree-action--buffer-watchers (ht-create)
+  "A hash table that associates watcher description and their outline buffer.")
+
+
+(defvar org-ol-tree-action--watcher-buffers (ht-create)
+  "A hash table that associates org buffers and their file watchers.")
 
 
 ;;; --- Configuration variables -------------------------------------------------
@@ -860,6 +871,7 @@ The majority of the code in this function was copied from the Emacs function
            (org-buffer-p (eq major-mode 'org-mode))
            (buffer (org-ol-tree-ui--get-buffer-create (buffer-name))))
       (progn
+        (add-hook 'kill-buffer-hook 'org-ol-tree-action--quit-on-kill nil t)
         (setq-local org-ol-tree--buffer buffer)
         (with-current-buffer buffer
             (unless org-ol-tree--buffer-p
@@ -953,6 +965,50 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
     (when (region-active-p)
       (keyboard-quit))
     (org-ol-tree-action--visit)))
+
+
+(defun org-ol-tree-action--goto-child (position &optional target-state)
+  "Move cursor to the current heading subheading on POSITION.
+
+If TARGET-STATE is passed, this function will make sure the child hading is
+`collapsed' or `expanded', depending on the symbol passed."
+  (let* ((ol-button (org-ol-tree-core--current-node))
+         (ol-state (treemacs-button-get ol-button :state))
+         (heading (org-ol-tree-core--heading-current))
+         (subheadings (org-ol-tree-core--heading-subheadings heading)))
+
+    (unless (and ol-button ol-state heading)
+      (user-error "Cursor is not on a valid section"))
+
+    (unless (>= (length subheadings) position)
+      (user-error "Section under cursor does not have any subsection on position %s" position))
+
+    (when (eq ol-state 'treemacs-org-ol-doc-closed-state)
+      (treemacs-expand-org-ol-doc))
+
+    (when (eq ol-state 'treemacs-org-ol-parent-section-closed-state)
+      (treemacs-expand-org-ol-parent-section))
+
+    (treemacs-next-line position)
+
+    (when target-state
+      (pcase target-state
+        ('expanded (treemacs-expand-org-ol-parent-section))
+        ('collapsed (treemacs-collapse-org-ol-parent-section))
+        ('treemacs-org-ol-parent-section-open-state (treemacs-expand-org-ol-parent-section))
+        ('treemacs-org-ol-parent-section-closed-state (treemacs-collapse-org-ol-parent-section))
+        (_ (user-error "Unrecognized state %s" target-state))))))
+
+
+(defun org-ol-tree-action--goto-setion (section-id)
+  "Move the cursor to the section with id SECTION-ID.
+
+This function expands any node necessary to reach the proper section. If a
+section with the given SECTION-ID does not exists, an `user-error' is raised."
+  (let* ((path (mapcar 'string-to-number (split-string section-id "\\."))))
+    (org-ol-tree-action--goto-root)
+    (while (> (length path) 0)
+      (org-ol-tree-action--goto-child (pop path)))))
 
 
 (defun org-ol-tree-action--goto-root ()
@@ -1058,6 +1114,61 @@ causes the buffer to get widen."
         (treemacs-pulse-on-success))
 
 
+(defun org-ol-tree-action-refresh (&optional prevent-rebuild)
+  "Refresh the Outline tree.
+
+If PREVENT-REBUILD is non nil, this function just refresh the buffer content
+without refreshing the base data."
+  (interactive)
+
+  (when org-ol-tree--buffer-p
+    (unless prevent-rebuild
+      (let ((org-ol-tree-core--rebuild-DOM-p t))
+        (org-ol-tree-core--doc)))
+
+    (let ((current-heading (org-ol-tree-core--heading-current)))
+      (org-ol-tree-action--goto-root)
+      (treemacs-collapse-org-ol-doc)
+      (org-ol-tree-action--goto-setion (org-ol-tree-core--heading-id current-heading)))))
+
+
+(defun org-ol-tree-action--quit-on-kill ()
+  "Hook function used to kill the Outline window when killing the Org buffer."
+  (when org-ol-tree--buffer
+    (pcase (org-ol-tree-ui--visibility)
+      ('visible
+       (select-window (get-buffer-window org-ol-tree--buffer))
+       (org-ol-tree-action--stop-watching-buffer)
+       (call-interactively 'org-ol-tree-ui--kill-buffer))
+      ('exists
+       (kill-buffer org-ol-tree--buffer)))))
+
+
+(defun org-ol-tree-action--start-watching-buffer ()
+  "Set a file-watcher for the Org buffer associated with this Outline."
+
+  (when org-ol-tree--buffer-p
+    (when-let ((org-file (buffer-file-name org-ol-tree--org-buffer))
+               (watcher (file-notify-add-watch org-file
+                                               '(change)
+                                               #'org-ol-tree--filewatch-callback)))
+      (ht-set! org-ol-tree-action--buffer-watchers (current-buffer) watcher)
+      (ht-set! org-ol-tree-action--watcher-buffers watcher (current-buffer)))))
+
+
+(defun org-ol-tree-action--stop-watching-buffer ()
+  "Remove the file-watcher for the Org buffer associated with this Outline."
+
+  (when org-ol-tree--buffer-p
+    (when-let ((watcher (ht-get org-ol-tree-action--buffer-watchers (current-buffer)))
+               (buffer (ht-get org-ol-tree-action--watcher-buffers watcher)))
+      (unless (eq buffer (current-buffer))
+          (error "Problem matching file watcher with current Outline"))
+      (ht-remove! org-ol-tree-action--watcher-buffers watcher)
+      (ht-remove! org-ol-tree-action--buffer-watchers buffer)
+      (file-notify-rm-watch watcher))))
+
+
 
 ;;;; --- Treemacs extension
 
@@ -1125,6 +1236,8 @@ causes the buffer to get widen."
              (define-key map (kbd "<end>")    #'org-ol-tree-action--goto-last-node)
              (define-key map (kbd "C-e")      #'org-ol-tree-action--goto-last-node)
              (define-key map "q"              #'org-ol-tree-quit)
+             (define-key map "r"              #'org-ol-tree-action-refresh)
+
 
              ;; ignore treemacs bindings
 
@@ -1145,7 +1258,6 @@ causes the buffer to get widen."
              (define-key map "gr" 'ignore)
              (define-key map "m" 'ignore)
              (define-key map "o" 'ignore)
-             (define-key map "r" 'ignore)
              (define-key map "s" 'ignore)
              (define-key map "t" 'ignore)
              (define-key map "w" 'ignore)
@@ -1163,13 +1275,14 @@ causes the buffer to get widen."
     (kbd "<home>")  #'org-ol-tree-action--goto-root
     "G"             #'org-ol-tree-action--goto-last-node
     (kbd "<end>")   #'org-ol-tree-action--goto-last-node
+    "q" #'org-ol-tree-quit
+    "r" #'org-ol-tree-action-refresh
     "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
     "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
     "L" #'(lambda () (interactive) (evil-window-bottom) (goto-char (point-at-bol)))
     "0" #'(lambda () (interactive) (goto-char (point-at-bol)))
     "^" #'(lambda () (interactive) (goto-char (point-at-bol)))
     "$" #'(lambda () (interactive) (goto-char (point-at-bol)))
-    "q" #'org-ol-tree-quit
 
     ;; ignore treemacs bindings
 
@@ -1190,7 +1303,6 @@ causes the buffer to get widen."
     "gr" 'ignore
     "m" 'ignore
     "o" 'ignore
-    "r" 'ignore
     "s" 'ignore
     "t" 'ignore
     "w" 'ignore
@@ -1199,6 +1311,28 @@ causes the buffer to get widen."
 
 
 ;;;; --- Commands
+
+(defun org-ol-tree--filewatch-callback (event)
+  "Function called when the operating system detects a file change.
+
+The file watched is always `org-ol-tree--org-buffer'.
+
+For more information on EVENT, check the documentation of
+`file-notify-add-watch'."
+  (cl-multiple-value-bind (descriptor action file) event
+    (when (member action '(renamed changed))
+      (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
+            (current-window (selected-window)))
+        (if (and ol-buffer (buffer-live-p ol-buffer))
+            (progn
+              (when (eq (org-ol-tree-ui--visibility) 'visible)
+                (select-window (get-buffer-window ol-buffer))
+                (org-ol-tree-action-refresh nil)
+                (select-window current-window)))
+          (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
+          (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
+          (file-notify-rm-watch descriptor))))))
+
 
 (defun org-ol-tree--init()
   "Initialize an org-ol-tree for the current Org buffer."
@@ -1217,7 +1351,7 @@ causes the buffer to get widen."
     (read-only-mode 1))
 
   (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
-
+  (org-ol-tree-action--start-watching-buffer)
   (beginning-of-line))
 
 
@@ -1241,7 +1375,8 @@ causes the buffer to get widen."
        (org-ol-tree-ui--setup-window nil)))
     ('exists
      (org-ol-tree-ui--setup-buffer)
-     (org-ol-tree-ui--setup-window t))
+     (org-ol-tree-ui--setup-window t)
+     (org-ol-tree-action-refresh nil))
     ('none
      (org-ol-tree--init))))
 
