@@ -104,6 +104,24 @@
   :group 'org-ol-tree-faces)
 
 
+(defface org-ol-tree-section-rename-border
+  '((t :inherit highlight))
+  "Color of the edit text border."
+  :group 'org-ol-tree-faces)
+
+
+(defface org-ol-tree-section-rename-background
+  '((t :inherit vertical-border))
+  "Color of the edit text background."
+  :group 'org-ol-tree-faces)
+
+
+(defface org-ol-tree-section-rename-text
+  '((t :inherit info-node))
+  "Color of the edit text foreground."
+  :group 'org-ol-tree-faces)
+
+
 
 ;;;; --- Variables
 
@@ -134,8 +152,7 @@ Never set or modify this variable directly.")
 
 
 (defvar-local org-ol-tree--org-buffer nil
-  "A buffer local variable used to hold the buffer object where the outline
-should act on.")
+  "The Outline buffer displaying the tree view.")
 
 
 (defvar-local org-ol-tree-core--DOM nil
@@ -1136,15 +1153,71 @@ causes the buffer to get widen."
         (treemacs-pulse-on-success))
 
 
+(defun org-ol-tree-action--rename-read (prompt &optional initial-input)
+  "Read a string using a pos-frame with given PROMPT and INITIAL-INPUT.
+
+This function is a drop-in replacement for `cfrs-read' that adds the setup
+`org-ol-tree' needs."
+  (if (not (or (display-graphic-p)
+               (not (fboundp #'display-buffer-in-side-window))))
+      (read-string prompt nil nil initial-input)
+    (let* ((buffer (get-buffer-create " *Pos-Frame-Read*"))
+           (bg-color (face-attribute 'org-ol-tree-section-rename-background :foreground nil t))
+           (fg-color (face-attribute 'org-ol-tree-section-rename-text :foreground nil t))
+           (border-color (face-attribute 'org-ol-tree-section-rename-border :background nil t))
+           (full-padding (line-pixel-height))
+           (padding (- (/ (line-pixel-height) 2) 1))
+           (cursor cursor-type)
+           (frame (posframe-show
+                   buffer
+                   :min-width (- (window-size nil t) 2)
+                   :background-color bg-color
+                   :foreground-color fg-color
+                   :border-width 1
+                   :border-color border-color
+                   :y-pixel-offset (- full-padding)
+                   :left-fringe padding
+                   :right-fringe padding
+                   :position (point-at-bol)
+                   :string ""
+                   :override-parameters `(,@cfrs-frame-parameters
+                                          (cursor-type . ,cursor)
+                                          (no-accept-focus . nil)))))
+      (with-selected-frame frame
+        (modify-frame-parameters frame '((min-height . 2)))
+        (set-face-attribute 'default frame
+                            :inherit 'org-ol-tree-section-title-face
+                            :box (list :line-width padding :color bg-color))
+        (x-focus-frame frame)
+        (add-hook 'delete-frame-functions #'cfrs--on-frame-kill nil :local)
+        (with-current-buffer buffer
+          (setq-local cursor-type cursor)
+          (cfrs-input-mode)
+          (-each (overlays-in (point-min) (point-max)) #'delete-overlay)
+          (erase-buffer)
+          (-doto (make-overlay 1 2)
+            (overlay-put 'before-string (propertize prompt 'face 'minibuffer-prompt))
+            (overlay-put 'rear-nonsticky t)
+            (overlay-put 'read-only t))
+          (when initial-input
+            (insert initial-input))
+          (when (fboundp 'evil-insert-state)
+            (evil-insert-state nil))
+          (end-of-line)
+          (recursive-edit)
+          (cfrs--hide)
+          (s-trim (buffer-string)))))))
+
+
 (defun org-ol-tree-action-rename-node (&optional heading new-title)
   "Rename HEADING to NEW-TITLE.
 
 If the cursor is on top of the root node, the rename will change thee document
 title."
   (interactive
-   (let ((heading (org-ol-tree-core--heading-current))
-         (cfrs-frame-parameters (list :width (window-size (selected-window) t))))
-     (list heading (cfrs-read "Title: " (org-ol-tree-core--heading-name heading)))))
+   (let* ((heading (org-ol-tree-core--heading-current)))
+     (list heading (org-ol-tree-action--rename-read "New name: " (org-ol-tree-core--heading-name heading)))))
+  (cfrs-cancel)
   (let ((current-name (org-ol-tree-core--heading-name heading))
         (marker (org-ol-tree-core--heading-marker heading))
         (progreess (org-ol-tree-core--heading-progress heading)))
@@ -1384,6 +1457,11 @@ For more information on EVENT, check the documentation of
   "Initialize an org-ol-tree for the current Org buffer."
   (org-ol-tree-ui--setup-buffer)
   (org-ol-tree-ui--setup-window t)
+  (with-eval-after-load 'cfrs
+    (define-key cfrs-input-mode-map [escape] #'cfrs-cancel)
+
+    (when (org-ol-tree-system--evil-p)
+      (evil-define-key 'normal cfrs-input-mode-map "q" #'cfrs-cancel)))
 
   (treemacs-ORG-OL-DOC-extension)
   (treemacs-expand-org-ol-doc)
