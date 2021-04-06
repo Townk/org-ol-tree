@@ -189,6 +189,10 @@ the `org-ol-tree-ui--update-icon-set' function.")
   "A hash table that associates org buffers and their file watchers.")
 
 
+(defvar org-ol-tree-action--renaming-frame nil
+  "When renaming a section in GUI, it holds the child frame of the operation.")
+
+
 ;;; --- Configuration variables -------------------------------------------------
 
 (defvar org-ol-tree-action-move-to-target nil
@@ -1153,6 +1157,15 @@ causes the buffer to get widen."
         (treemacs-pulse-on-success))
 
 
+(defun org-ol-tree-action--end-renaming-on-unfocus ()
+  "Cancel the read string from active `cfrs-read' session."
+  (when  (and (framep org-ol-tree-action--renaming-frame)
+              (frame-live-p org-ol-tree-action--renaming-frame))
+    (with-selected-frame org-ol-tree-action--renaming-frame
+      (cfrs-cancel)))
+  (setq org-ol-tree-action--renaming-frame nil))
+
+
 (defun org-ol-tree-action--rename-read (prompt &optional initial-input)
   "Read a string using a pos-frame with given PROMPT and INITIAL-INPUT.
 
@@ -1161,6 +1174,10 @@ This function is a drop-in replacement for `cfrs-read' that adds the setup
   (if (not (or (display-graphic-p)
                (not (fboundp #'display-buffer-in-side-window))))
       (read-string prompt nil nil initial-input)
+    (when  (and (framep org-ol-tree-action--renaming-frame)
+                (frame-live-p org-ol-tree-action--renaming-frame))
+      (delete-frame org-ol-tree-action--renaming-frame)
+      (setq org-ol-tree-action--renaming-frame nil))
     (let* ((buffer (get-buffer-create " *Pos-Frame-Read*"))
            (bg-color (face-attribute 'org-ol-tree-section-rename-background :foreground nil t))
            (fg-color (face-attribute 'org-ol-tree-section-rename-text :foreground nil t))
@@ -1183,6 +1200,7 @@ This function is a drop-in replacement for `cfrs-read' that adds the setup
                    :override-parameters `(,@cfrs-frame-parameters
                                           (cursor-type . ,cursor)
                                           (no-accept-focus . nil)))))
+      (setq org-ol-tree-action--renaming-frame frame)
       (with-selected-frame frame
         (modify-frame-parameters frame '((min-height . 2)))
         (set-face-attribute 'default frame
@@ -1475,6 +1493,7 @@ For more information on EVENT, check the documentation of
     (read-only-mode 1))
 
   (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
+  (add-function :after after-focus-change-function #'org-ol-tree-action--end-renaming-on-unfocus)
   (org-ol-tree-action--start-watching-buffer)
   (beginning-of-line))
 
