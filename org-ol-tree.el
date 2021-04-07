@@ -264,7 +264,7 @@ configuration for the outline window changes, or when use expands or collapses
 the nodes.")
 
 
-(defvar org-ol-tree-ui-window-header-format '("  ☰ Outline")
+(defvar org-ol-tree-ui-window-header-format '(" ☰ Outline")
   "Control the Outline Header's appearance.
 
 If this variable is nil, org-ol-tree won't display a header on the outline
@@ -329,7 +329,12 @@ The outline chooses the theme based on the following criteria:
   (concat "\\(.*\\)[[:blank:]]+"
           "\\(\\[[[:digit:]]*[[:blank:]]*/[[:blank:]]*[[:digit:]]*[[:blank:]]*\\]\\)"
           "[[:blank:]]*$")
-  "Regular expression to match an Org headline.")
+  "Regular expression to match task progress on an Org headline.")
+
+
+(defconst org-ol-tree-core--title-re
+  "^#\\+title:[ \t]*\\([^\n]+\\)"
+  "Regular expression to match an Org document title.")
 
 
 
@@ -595,7 +600,7 @@ title case."
   (save-excursion
     (goto-char (point-min))
     (cond
-     ((re-search-forward "^#\\+TITLE:[ \t]*\\([^\n]+\\)" nil t)
+     ((re-search-forward org-ol-tree-core--title-re nil t)
       (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
      ((buffer-file-name)
       (s-titleized-words (file-name-base (buffer-file-name))))
@@ -942,8 +947,29 @@ The majority of the code in this function was copied from the Emacs function
       (kill-buffer-and-window))))
 
 
+(defun org-ol-tree-ui--rebuild-tree ()
+  "Erase and re-draw the entire tree hierarchy for the current Outline."
+  (let ((buffer (if org-ol-tree--buffer-p (current-buffer) org-ol-tree--buffer)))
+    (unless buffer
+      (user-error "Cannot rebuild the Outline tree from an unrelated buffer"))
+
+    (with-current-buffer buffer
+      (treemacs-with-writable-buffer
+       (erase-buffer)
+       (treemacs-ORG-OL-DOC-extension)
+       (treemacs-expand-org-ol-doc)
+       (save-excursion
+         (add-text-properties (point-at-bol)
+                              (point-at-eol)
+                              (list :heading org-ol-tree-core--DOM))
+         (goto-char (point-max))
+         (insert "\n"))))))
+
+
 
 ;;;; --- Node actions
+
+;;; --- Mouse -------------------------------------------------------------------
 
 (defun org-ol-tree-action--leftclick (event)
   "Function used to perform a mouse click on a node.
@@ -1009,6 +1035,8 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
       (keyboard-quit))
     (org-ol-tree-action--visit)))
 
+
+;;; --- Navigation --------------------------------------------------------------
 
 (defun org-ol-tree-action--goto-child (position &optional target-state)
   "Move cursor to the current heading subheading on POSITION.
@@ -1107,6 +1135,8 @@ If the buffer is narrowed, it will get widen as a side effect of this function."
   (recenter (min (max 0 scroll-margin) (truncate (/ (window-body-height) 4.0))) t))
 
 
+;;; --- Visit -------------------------------------------------------------------
+
 (defun org-ol-tree-action--narrow-buffer-maybe (perform-narrrowing narrowed-p)
   "Narrow current Org buffer according to PERFORM-NARRROWING and NARROWED-P."
   (when (or (and (not perform-narrrowing) narrowed-p)
@@ -1153,9 +1183,11 @@ causes the buffer to get widen."
   (when (or (not org-ol-tree-action-move-to-target) org-ol-tree-action-close-on-selected)
           (select-window (org-ol-tree-ui--get-window))
           (when org-ol-tree-action-close-on-selected
-            (org-ol-tree-quit)))
+            (org-ol-tree-action--quit)))
         (treemacs-pulse-on-success))
 
+
+;;; --- Rename ------------------------------------------------------------------
 
 (defun org-ol-tree-action--end-renaming-on-unfocus ()
   "Cancel the read string from active `cfrs-read' session."
@@ -1224,34 +1256,69 @@ This function is a drop-in replacement for `cfrs-read' that adds the setup
           (end-of-line)
           (recursive-edit)
           (cfrs--hide)
+          (setq org-ol-tree-action--renaming-frame nil)
           (s-trim (buffer-string)))))))
 
 
-(defun org-ol-tree-action-rename-node (&optional heading new-title)
+(defun org-ol-tree-action--rename-title (new-title)
+  "Rename current Org document title to NEW-TITLE.
+
+If the current document does not have a title defined by '#+TITLE:', a
+`user-error' is raised."
+  (save-excursion
+    (goto-char (point-min))
+    (if (not (re-search-forward org-ol-tree-core--title-re nil t))
+        (user-error "Cannot rename a title if the document does not have one")
+      (goto-char (match-beginning 1))
+      (delete-region (match-beginning 1) (match-end 1))
+      (insert new-title))))
+
+
+(defun org-ol-tree-action--rename-section (heading-point todo-progress new-name)
+  "Rename a section on HEADING-POINT to NEW-NAME.
+
+TODO-PROGRESS is the text defining the progress of a multi-task TODO at the end
+of the headline. For instance, on the section \"Section Title [2/3]\", the
+TODO-PROGRESS should be \"[2/3]\"."
+  (save-excursion
+    (goto-char heading-point)
+    (org-edit-headline (concat
+                        new-name
+                        (when todo-progress
+                          (format " %s" todo-progress))))))
+
+
+(defun org-ol-tree-action--rename (&optional heading new-title current-name)
   "Rename HEADING to NEW-TITLE.
 
 If the cursor is on top of the root node, the rename will change thee document
-title."
+title.
+
+If CURRENT-NAME is given, this function does not retrieve the node current name
+for comparison and uses the provided name instead."
   (interactive
-   (let* ((heading (org-ol-tree-core--heading-current)))
-     (list heading (org-ol-tree-action--rename-read "New name: " (org-ol-tree-core--heading-name heading)))))
-  (cfrs-cancel)
-  (let ((current-name (org-ol-tree-core--heading-name heading))
-        (marker (org-ol-tree-core--heading-marker heading))
-        (progreess (org-ol-tree-core--heading-progress heading)))
+   (let* ((heading (org-ol-tree-core--heading-current))
+          (current-name (org-ol-tree-core--heading-name heading)))
+     (list heading (org-ol-tree-action--rename-read "New name: " current-name) current-name)))
+  (when org-ol-tree-action--renaming-frame
+    (cfrs-cancel))
+  (let ((marker (org-ol-tree-core--heading-marker heading))
+        (progress (org-ol-tree-core--heading-progress heading)))
     (when (not (equal current-name new-title))
-      (with-current-buffer org-ol-tree--org-buffer
-        (save-excursion
-          (goto-char marker)
-          (org-edit-headline (concat
-                              new-title
-                              (when progreess
-                                (format " %s" progreess))))))
       (setf (org-ol-tree-core--heading-name heading) new-title)
-      (org-ol-tree-action-refresh t))))
+      (if (eq heading org-ol-tree-core--DOM)
+          (progn
+            (org-ol-tree-ui--rebuild-tree)
+            (with-current-buffer org-ol-tree--org-buffer
+              (org-ol-tree-action--rename-title new-title)))
+        (with-current-buffer org-ol-tree--org-buffer
+          (org-ol-tree-action--rename-section marker progress new-title)))
+      (org-ol-tree-action--refresh t))))
 
 
-(defun org-ol-tree-action-refresh (&optional prevent-rebuild)
+;;; --- Refresh -----------------------------------------------------------------
+
+(defun org-ol-tree-action--refresh (&optional prevent-rebuild)
   "Refresh the Outline tree.
 
 If PREVENT-REBUILD is non nil, this function just refresh the buffer content
@@ -1269,16 +1336,26 @@ without refreshing the base data."
       (org-ol-tree-action--goto-setion (org-ol-tree-core--heading-id current-heading)))))
 
 
-(defun org-ol-tree-action--quit-on-kill ()
-  "Hook function used to kill the Outline window when killing the Org buffer."
-  (when org-ol-tree--buffer
-    (pcase (org-ol-tree-ui--visibility)
-      ('visible
-       (select-window (get-buffer-window org-ol-tree--buffer))
-       (org-ol-tree-action--stop-watching-buffer)
-       (call-interactively 'org-ol-tree-ui--kill-buffer))
-      ('exists
-       (kill-buffer org-ol-tree--buffer)))))
+(defun org-ol-tree-action--filewatch-callback (event)
+  "Function called when the operating system detects a file change.
+
+The file watched is always `org-ol-tree--org-buffer'.
+
+For more information on EVENT, check the documentation of
+`file-notify-add-watch'."
+  (cl-multiple-value-bind (descriptor action file) event
+    (when (member action '(renamed changed))
+      (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
+            (current-window (selected-window)))
+        (if (and ol-buffer (buffer-live-p ol-buffer))
+            (progn
+              (when (eq (org-ol-tree-ui--visibility) 'visible)
+                (select-window (get-buffer-window ol-buffer))
+                (org-ol-tree-action--refresh nil)
+                (select-window current-window)))
+          (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
+          (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
+          (file-notify-rm-watch descriptor))))))
 
 
 (defun org-ol-tree-action--start-watching-buffer ()
@@ -1288,7 +1365,7 @@ without refreshing the base data."
     (when-let ((org-file (buffer-file-name org-ol-tree--org-buffer))
                (watcher (file-notify-add-watch org-file
                                                '(change)
-                                               #'org-ol-tree--filewatch-callback)))
+                                               #'org-ol-tree-action--filewatch-callback)))
       (ht-set! org-ol-tree-action--buffer-watchers (current-buffer) watcher)
       (ht-set! org-ol-tree-action--watcher-buffers watcher (current-buffer)))))
 
@@ -1304,6 +1381,51 @@ without refreshing the base data."
       (ht-remove! org-ol-tree-action--watcher-buffers watcher)
       (ht-remove! org-ol-tree-action--buffer-watchers buffer)
       (file-notify-rm-watch watcher))))
+
+
+;;; --- Setup / Tear down -------------------------------------------------------
+
+(defun org-ol-tree-action--init()
+  "Initialize an org-ol-tree for the current Org buffer."
+  (org-ol-tree-ui--setup-buffer)
+  (org-ol-tree-ui--setup-window t)
+  (with-eval-after-load 'cfrs
+    (define-key cfrs-input-mode-map [escape] #'cfrs-cancel)
+
+    (when (org-ol-tree-system--evil-p)
+      (evil-define-key 'normal cfrs-input-mode-map "q" #'cfrs-cancel)))
+
+  (org-ol-tree-ui--rebuild-tree)
+
+  (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
+  (add-function :after after-focus-change-function #'org-ol-tree-action--end-renaming-on-unfocus)
+  (org-ol-tree-action--start-watching-buffer)
+  (beginning-of-line))
+
+
+(defun org-ol-tree-action--quit-on-kill ()
+  "Hook function used to kill the Outline window when killing the Org buffer."
+  (when org-ol-tree--buffer
+    (pcase (org-ol-tree-ui--visibility)
+      ('visible
+       (select-window (get-buffer-window org-ol-tree--buffer))
+       (org-ol-tree-action--stop-watching-buffer)
+       (call-interactively 'org-ol-tree-ui--kill-buffer))
+      ('exists
+       (kill-buffer org-ol-tree--buffer)))))
+
+
+(defun org-ol-tree-action--quit (&optional arg)
+  "Quit org-ol-tree with `bury-buffer'.
+
+With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
+  (interactive "P")
+  (when (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer))
+    (with-current-buffer (or (when (buffer-live-p org-ol-tree--buffer) org-ol-tree--buffer)
+                             (current-buffer))
+      (if arg
+          (org-ol-tree-ui--kill-buffer)
+        (bury-buffer)))))
 
 
 
@@ -1372,9 +1494,9 @@ without refreshing the base data."
              (define-key map (kbd "C-a")      #'org-ol-tree-action--goto-root)
              (define-key map (kbd "<end>")    #'org-ol-tree-action--goto-last-node)
              (define-key map (kbd "C-e")      #'org-ol-tree-action--goto-last-node)
-             (define-key map "q"              #'org-ol-tree-quit)
-             (define-key map "R"              #'org-ol-tree-action-rename-node)
-             (define-key map "r"              #'org-ol-tree-action-refresh)
+             (define-key map "q"              #'org-ol-tree-action--quit)
+             (define-key map "R"              #'org-ol-tree-action--rename)
+             (define-key map "r"              #'org-ol-tree-action--refresh)
 
 
              ;; ignore treemacs bindings
@@ -1412,9 +1534,9 @@ without refreshing the base data."
     (kbd "<home>")  #'org-ol-tree-action--goto-root
     "G"             #'org-ol-tree-action--goto-last-node
     (kbd "<end>")   #'org-ol-tree-action--goto-last-node
-    "q" #'org-ol-tree-quit
-    "R" #'org-ol-tree-action-rename-node
-    "r" #'org-ol-tree-action-refresh
+    "q" #'org-ol-tree-action--quit
+    "R" #'org-ol-tree-action--rename
+    "r" #'org-ol-tree-action--refresh
     "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
     "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
     "L" #'(lambda () (interactive) (evil-window-bottom) (goto-char (point-at-bol)))
@@ -1449,55 +1571,6 @@ without refreshing the base data."
 
 ;;;; --- Commands
 
-(defun org-ol-tree--filewatch-callback (event)
-  "Function called when the operating system detects a file change.
-
-The file watched is always `org-ol-tree--org-buffer'.
-
-For more information on EVENT, check the documentation of
-`file-notify-add-watch'."
-  (cl-multiple-value-bind (descriptor action file) event
-    (when (member action '(renamed changed))
-      (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
-            (current-window (selected-window)))
-        (if (and ol-buffer (buffer-live-p ol-buffer))
-            (progn
-              (when (eq (org-ol-tree-ui--visibility) 'visible)
-                (select-window (get-buffer-window ol-buffer))
-                (org-ol-tree-action-refresh nil)
-                (select-window current-window)))
-          (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
-          (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
-          (file-notify-rm-watch descriptor))))))
-
-
-(defun org-ol-tree--init()
-  "Initialize an org-ol-tree for the current Org buffer."
-  (org-ol-tree-ui--setup-buffer)
-  (org-ol-tree-ui--setup-window t)
-  (with-eval-after-load 'cfrs
-    (define-key cfrs-input-mode-map [escape] #'cfrs-cancel)
-
-    (when (org-ol-tree-system--evil-p)
-      (evil-define-key 'normal cfrs-input-mode-map "q" #'cfrs-cancel)))
-
-  (treemacs-ORG-OL-DOC-extension)
-  (treemacs-expand-org-ol-doc)
-  (save-excursion
-    (read-only-mode -1)
-    (add-text-properties (point-at-bol)
-                         (point-at-eol)
-                         (list :heading org-ol-tree-core--DOM))
-    (goto-char (point-max))
-    (insert "\n")
-    (read-only-mode 1))
-
-  (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
-  (add-function :after after-focus-change-function #'org-ol-tree-action--end-renaming-on-unfocus)
-  (org-ol-tree-action--start-watching-buffer)
-  (beginning-of-line))
-
-
 ;;;###autoload
 (defun org-ol-tree ()
   "Initialise or toggle org-ol-tree.
@@ -1519,22 +1592,9 @@ For more information on EVENT, check the documentation of
     ('exists
      (org-ol-tree-ui--setup-buffer)
      (org-ol-tree-ui--setup-window t)
-     (org-ol-tree-action-refresh nil))
+     (org-ol-tree-action--refresh nil))
     ('none
-     (org-ol-tree--init))))
-
-
-(defun org-ol-tree-quit (&optional arg)
-  "Quit org-ol-tree with `bury-buffer'.
-
-With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
-  (interactive "P")
-  (when (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer))
-    (with-current-buffer (or (when (buffer-live-p org-ol-tree--buffer) org-ol-tree--buffer)
-                             (current-buffer))
-      (if arg
-          (org-ol-tree-ui--kill-buffer)
-        (bury-buffer)))))
+     (org-ol-tree-action--init))))
 
 
 
