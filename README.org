@@ -16,7 +16,7 @@ This is a list of features I want to implement before doing a proper release of 
 
 - Promote or demote a heading from the outline;
 - Move headings up and down;
-- Rename headings from the outline;
+- +Rename headings from the outline+;
 - +Have a configuration for the window position+;
 - +Add default keybindings for Vanilla Emacs and Evil+;
 

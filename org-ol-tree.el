@@ -104,24 +104,6 @@
   :group 'org-ol-tree-faces)
 
 
-(defface org-ol-tree-section-rename-border
-  '((t :inherit highlight))
-  "Color of the edit text border."
-  :group 'org-ol-tree-faces)
-
-
-(defface org-ol-tree-section-rename-background
-  '((t :inherit vertical-border))
-  "Color of the edit text background."
-  :group 'org-ol-tree-faces)
-
-
-(defface org-ol-tree-section-rename-text
-  '((t :inherit info-node))
-  "Color of the edit text foreground."
-  :group 'org-ol-tree-faces)
-
-
 
 ;;;; --- Variables
 
@@ -187,10 +169,6 @@ the `org-ol-tree-ui--update-icon-set' function.")
 
 (defvar org-ol-tree-action--watcher-buffers (ht-create)
   "A hash table that associates org buffers and their file watchers.")
-
-
-(defvar org-ol-tree-action--renaming-frame nil
-  "When renaming a section in GUI, it holds the child frame of the operation.")
 
 
 ;;; --- Configuration variables -------------------------------------------------
@@ -1189,77 +1167,6 @@ causes the buffer to get widen."
 
 ;;; --- Rename ------------------------------------------------------------------
 
-(defun org-ol-tree-action--end-renaming-on-unfocus ()
-  "Cancel the read string from active `cfrs-read' session."
-  (when  (and (framep org-ol-tree-action--renaming-frame)
-              (frame-live-p org-ol-tree-action--renaming-frame))
-    (with-selected-frame org-ol-tree-action--renaming-frame
-      (cfrs-cancel)))
-  (setq org-ol-tree-action--renaming-frame nil))
-
-
-(defun org-ol-tree-action--rename-read (prompt &optional initial-input)
-  "Read a string using a pos-frame with given PROMPT and INITIAL-INPUT.
-
-This function is a drop-in replacement for `cfrs-read' that adds the setup
-`org-ol-tree' needs."
-  (if (not (or (display-graphic-p)
-               (not (fboundp #'display-buffer-in-side-window))))
-      (read-string prompt nil nil initial-input)
-    (when  (and (framep org-ol-tree-action--renaming-frame)
-                (frame-live-p org-ol-tree-action--renaming-frame))
-      (delete-frame org-ol-tree-action--renaming-frame)
-      (setq org-ol-tree-action--renaming-frame nil))
-    (let* ((buffer (get-buffer-create " *Pos-Frame-Read*"))
-           (bg-color (face-attribute 'org-ol-tree-section-rename-background :foreground nil t))
-           (fg-color (face-attribute 'org-ol-tree-section-rename-text :foreground nil t))
-           (border-color (face-attribute 'org-ol-tree-section-rename-border :background nil t))
-           (full-padding (line-pixel-height))
-           (padding (- (/ (line-pixel-height) 2) 1))
-           (cursor cursor-type)
-           (frame (posframe-show
-                   buffer
-                   :min-width (- (window-size nil t) 2)
-                   :background-color bg-color
-                   :foreground-color fg-color
-                   :border-width 1
-                   :border-color border-color
-                   :y-pixel-offset (- full-padding)
-                   :left-fringe padding
-                   :right-fringe padding
-                   :position (point-at-bol)
-                   :string ""
-                   :override-parameters `(,@cfrs-frame-parameters
-                                          (cursor-type . ,cursor)
-                                          (no-accept-focus . nil)))))
-      (setq org-ol-tree-action--renaming-frame frame)
-      (with-selected-frame frame
-        (modify-frame-parameters frame '((min-height . 2)))
-        (set-face-attribute 'default frame
-                            :inherit 'org-ol-tree-section-title-face
-                            :box (list :line-width padding :color bg-color))
-        (x-focus-frame frame)
-        (add-hook 'delete-frame-functions #'cfrs--on-frame-kill nil :local)
-        (with-current-buffer buffer
-          (setq-local cursor-type cursor)
-          (cfrs-input-mode)
-          (-each (overlays-in (point-min) (point-max)) #'delete-overlay)
-          (erase-buffer)
-          (-doto (make-overlay 1 2)
-            (overlay-put 'before-string (propertize prompt 'face 'minibuffer-prompt))
-            (overlay-put 'rear-nonsticky t)
-            (overlay-put 'read-only t))
-          (when initial-input
-            (insert initial-input))
-          (when (fboundp 'evil-insert-state)
-            (evil-insert-state nil))
-          (end-of-line)
-          (recursive-edit)
-          (cfrs--hide)
-          (setq org-ol-tree-action--renaming-frame nil)
-          (s-trim (buffer-string)))))))
-
-
 (defun org-ol-tree-action--rename-title (new-title)
   "Rename current Org document title to NEW-TITLE.
 
@@ -1267,11 +1174,13 @@ If the current document does not have a title defined by '#+TITLE:', a
 `user-error' is raised."
   (save-excursion
     (goto-char (point-min))
-    (if (not (re-search-forward org-ol-tree-core--title-re nil t))
-        (user-error "Cannot rename a title if the document does not have one")
-      (goto-char (match-beginning 1))
-      (delete-region (match-beginning 1) (match-end 1))
-      (insert new-title))))
+    (if (re-search-forward org-ol-tree-core--title-re nil t)
+      (progn
+        (goto-char (match-beginning 1))
+        (delete-region (match-beginning 1) (match-end 1))
+        (insert new-title))
+      (goto-char (point-min))
+      (insert (format "#+TITLE: %s\n" new-title)))))
 
 
 (defun org-ol-tree-action--rename-section (heading-point todo-progress new-name)
@@ -1299,9 +1208,7 @@ for comparison and uses the provided name instead."
   (interactive
    (let* ((heading (org-ol-tree-core--heading-current))
           (current-name (org-ol-tree-core--heading-name heading)))
-     (list heading (org-ol-tree-action--rename-read "New name: " current-name) current-name)))
-  (when org-ol-tree-action--renaming-frame
-    (cfrs-cancel))
+     (list heading (read-string "New name: " current-name) current-name)))
   (let ((marker (org-ol-tree-core--heading-marker heading))
         (progress (org-ol-tree-core--heading-progress heading)))
     (when (not (equal current-name new-title))
@@ -1398,7 +1305,6 @@ For more information on EVENT, check the documentation of
   (org-ol-tree-ui--rebuild-tree)
 
   (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
-  (add-function :after after-focus-change-function #'org-ol-tree-action--end-renaming-on-unfocus)
   (org-ol-tree-action--start-watching-buffer)
   (beginning-of-line))
 
