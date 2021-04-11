@@ -137,14 +137,6 @@ Never set or modify this variable directly.")
   "The Outline buffer displaying the tree view.")
 
 
-(defvar-local org-ol-tree-core--DOM nil
-  "Hold the root node for the displayed outline.")
-
-
-(defvar-local org-ol-tree-core--rebuild-DOM-p nil
-  "Flag indicating the root hading needs to be rebuild.")
-
-
 (defvar-local org-ol-tree-action--debounce-timer nil
   "The timer waiting to debounce click operations on the tree view.")
 
@@ -591,7 +583,6 @@ an Org buffer, raises a `user-error'."
           (widen)
           (goto-char (point-min))
           (let ((root (org-ol-tree-core--headline-create-internal
-                       :name (org-ol-tree-core--find-title)
                        :id "0"
                        :marker (point-min-marker)
                        :level 0))
@@ -625,18 +616,6 @@ transformed to title case."
          ((buffer-file-name)
           (s-titleized-words (file-name-base (buffer-file-name))))
          (t (s-titleized-words (buffer-name))))))))
-
-
-(defun org-ol-tree-core--doc ()
-  "Return the root headline for the outline in the current window.
-
-The root headline is cached on a buffer local variable"
-  (unless (and org-ol-tree-core--DOM (not org-ol-tree-core--rebuild-DOM-p))
-    (when org-ol-tree--buffer-p
-      (setq-local org-ol-tree-core--DOM
-                  (org-ol-tree-core--create-dom org-ol-tree--org-buffer))
-      (setq-local org-ol-tree-core--rebuild-DOM-p nil)))
-  org-ol-tree-core--DOM)
 
 
 
@@ -781,7 +760,8 @@ displays the Outline buufer into it."
     (-> org-ol-tree--buffer
       (display-buffer-in-side-window `((side . ,org-ol-tree-ui-window-position)))
       (select-window)
-      (set-window-dedicated-p t))))
+      (set-window-dedicated-p t))
+    (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)))
 
 
 (defun org-ol-tree-ui--get-window ()
@@ -967,7 +947,7 @@ The majority of the code in this function was copied from the Emacs function
       (kill-buffer-and-window))))
 
 
-(defun org-ol-tree-ui--rebuild-tree ()
+(defun org-ol-tree-ui--build-outline-tree ()
   "Erase and re-draw the entire tree hierarchy for the current Outline."
   (let ((buffer (if org-ol-tree--buffer-p (current-buffer) org-ol-tree--buffer)))
     (unless buffer
@@ -977,11 +957,10 @@ The majority of the code in this function was copied from the Emacs function
       (treemacs-with-writable-buffer
        (erase-buffer)
        (treemacs-ORG-OL-DOC-extension)
+       (org-ol-tree-core--node-put :headline (org-ol-tree-core--create-dom)
+                                   (org-ol-tree-core--root-node))
        (treemacs-expand-org-ol-doc)
        (save-excursion
-         (add-text-properties (point-at-bol)
-                              (point-at-eol)
-                              (list :headline org-ol-tree-core--DOM))
          (goto-char (point-max))
          (insert "\n"))))))
 
@@ -1244,12 +1223,13 @@ for comparison and uses the provided name instead."
           (current-name (org-ol-tree-core--headline-name headline)))
      (list headline (read-string "New name: " current-name) current-name)))
   (let ((marker (org-ol-tree-core--headline-marker headline))
+        (root-headline (org-ol-tree-core--root-headline))
         (progress (org-ol-tree-core--headline-progress headline)))
     (when (not (equal current-name new-title))
       (setf (org-ol-tree-core--headline-name headline) new-title)
-      (if (eq headline org-ol-tree-core--DOM)
+      (if (eq headline root-headline)
           (progn
-            (org-ol-tree-ui--rebuild-tree)
+            (org-ol-tree-ui--build-outline-tree)
             (with-current-buffer org-ol-tree--org-buffer
               (org-ol-tree-action--rename-title new-title)))
         (with-current-buffer org-ol-tree--org-buffer
@@ -1330,15 +1310,7 @@ For more information on EVENT, check the documentation of
   "Initialize an org-ol-tree for the current Org buffer."
   (org-ol-tree-ui--setup-buffer)
   (org-ol-tree-ui--setup-window t)
-  (with-eval-after-load 'cfrs
-    (define-key cfrs-input-mode-map [escape] #'cfrs-cancel)
-
-    (when (org-ol-tree-system--evil-p)
-      (evil-define-key 'normal cfrs-input-mode-map "q" #'cfrs-cancel)))
-
-  (org-ol-tree-ui--rebuild-tree)
-
-  (add-hook 'window-configuration-change-hook 'org-ol-tree-ui--window-resize nil t)
+  (org-ol-tree-ui--build-outline-tree)
   (org-ol-tree-action--start-watching-buffer)
   (beginning-of-line))
 
@@ -1406,11 +1378,13 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
   :ret-action 'org-ol-tree-action--visit
   :after-expand (org-ol-tree-ui--window-resize)
   :after-collapse (org-ol-tree-ui--window-resize)
-  :query-function (reverse (org-ol-tree-core--headline-children (org-ol-tree-core--doc)))
+  :query-function (reverse
+                   (org-ol-tree-core--headline-children
+                    (org-ol-tree-core--node-get :headline node)))
   :top-level-marker t
   :root-face 'org-ol-tree-document-face
-  :root-key-form (org-ol-tree-core--headline-id (org-ol-tree-core--doc))
-  :root-label (org-ol-tree-core--headline-name (org-ol-tree-core--doc))
+  :root-key-form (car (last (org-ol-tree-core--root-path)))
+  :root-label (org-ol-tree-core--find-title)
   :render-action
   (treemacs-render-node :icon (org-ol-tree-ui--section-icon item 'collapsed)
                         :label-form (org-ol-tree-core--headline-name item)
