@@ -36,7 +36,7 @@
 ;; - System information (system)
 ;; - Core objects (core)
 ;;   - Sections
-;;   - Headings
+;;   - Headlines
 ;;   - Document
 ;; - UI (ui)
 ;;   - Icons
@@ -263,7 +263,7 @@ An icon theme is a simple property list with four entries:
                 currently expanded;
   `:collapsed' - The icon displayed on the left of expandable nodes that are
                  currently collapsed;
-  `:sectiion' - The icon displayed on the left side of all section heading on
+  `:sectiion' - The icon displayed on the left side of all section headline on
                 the outline;
 
 All icons are strings. The `:root', `:expanded', and `collapsed' icons are
@@ -272,7 +272,7 @@ This is done to guarantee the proper alignment of icons when using unicode or
 all-the-icons icons.
 
 The `:section' icon is actually a simple one-line string where we replace the
-string \"%(section)\" by the section number of the heading. Different then the
+string \"%(section)\" by the section number of the headline. Different then the
 other icons, the `:section' icon allows any arbitrary size string.")
 
 
@@ -303,7 +303,7 @@ The outline chooses the theme based on the following criteria:
   "String prefixing all org-ol-tree buffers.")
 
 
-(defconst org-ol-tree-core--heading-re
+(defconst org-ol-tree-core--headline-re
   (concat "\\(.*\\)[[:blank:]]+"
           "\\(\\[[[:digit:]]*[[:blank:]]*/[[:blank:]]*[[:digit:]]*[[:blank:]]*\\]\\)"
           "[[:blank:]]*$")
@@ -355,8 +355,8 @@ instance, the section \"1.3.2 My section text\" would be represented as (2 3 1)
 on the stack form.
 
 If STACK-OR-STRING is a string it should have only integers separated by dots as
-they would appear on a section heading. For instance, the same \"1.3.2 My
-section text\" heading is represented by the string \"1.3.2\"."
+they would appear on a section headline. For instance, the same \"1.3.2 My
+section text\" headline is represented by the string \"1.3.2\"."
   (and stack-or-string
        (or (and (stringp stack-or-string)
                 (string-match-p "^[0-9]+\\(\\.[0-9]+\\)*$" stack-or-string))
@@ -422,130 +422,166 @@ Examples::
       new-stack)))
 
 
-;;; --- Headings ---------------------------------------------------------------
+;;; --- Headlines ---------------------------------------------------------------
 
-(defun org-ol-tree-heading--split-progress (text)
-  "Return a cons cell with heading title and progress mark.
+(defun org-ol-tree-headline--split-progress (text)
+  "Return a cons cell with headline title and progress mark.
 
-TEXT is the full heading title where this function will search for the progress
+TEXT is the full headline title where this function will search for the progress
 mark ([/])."
-  (if (string-match org-ol-tree-core--heading-re text)
+  (if (string-match org-ol-tree-core--headline-re text)
       `(,(s-trim (match-string 1 text)) . ,(s-trim (match-string 2 text)))
     `(,text . nil)))
 
 
-(cl-defstruct (org-ol-tree-core--heading (:constructor org-ol-tree-core--heading-create-internal)
-                                         (:copier nil)
-                                         :noinline)
-  "The Org Outline Tree heading structure.
+(cl-defstruct (org-ol-tree-core--headline (:constructor org-ol-tree-core--headline-create-internal)
+                                          (:copier nil)
+                                          :noinline)
+  "The Org Outline Tree headline structure.
 
 It has the basic information to build and draw a tree-like structure
 representing an entire org document."
   (name nil
         :type string
-        :documentation "The org heading text with no decorations.")
+        :documentation "The org headline text with no decorations.")
   (progress nil
             :type string
-            :documentation "A string indicating progress on this heading tasks.")
+            :documentation "A string indicating progress on this headline tasks.")
   (id nil
       :type string
       :documentation "A string representing the section number.")
   (marker nil
           :type marker
-          :documentation "Location of this heading on its org file buffer.")
+          :documentation "Location of this headline on its org file buffer.")
   (level 0
          :type number
-         :documentation "The nested level for this org heading.")
+         :documentation "The nested level for this org headline.")
   (parent nil
-          :type org-ol-tree-core--heading
-          :documentation "The parent heading or nil if this is a root heading.")
-  (subheadings (list)
-               :type list
-               :documentation "A collection of children headings."))
+          :type org-ol-tree-core--headline
+          :documentation "The parent headline or nil if this is a root headline.")
+  (children nil
+            :type list
+            :documentation "A collection of children headlines."))
 
 
-(defun org-ol-tree-core--heading-create (&optional previous-heading)
-  "Create a new `org-ol-tree-core--heading' from `point' on current org buffer.
+(defun org-ol-tree-core--create-headline (&optional previous-headline)
+  "Create a new `org-ol-tree-core--headline' from `point' on current org buffer.
 
-If PREVIOUS-HEADING is non nil, this function creates the new heading as a
-subheading of the given parent.
+If PREVIOUS-HEADLINE is non nil, this function creates the new headline as a
+child of the given parent.
 
-If `current-buffer' is not an org buffer, or `point' is not over an org heading,
+If `current-buffer' is not an org buffer, or `point' is not over an org headline,
 this functions raises a user error."
   (unless (eq major-mode 'org-mode)
-    (user-error "Cannot create an org-ol-tree-core--heading on a non-org buffer"))
+    (user-error "Cannot create an org-ol-tree-core--headline on a non-org buffer"))
 
   (unless (org-at-heading-p)
-    (user-error "Cannot create a heading with cursor outside an actual org headline"))
+    (user-error "Cannot create a headline with cursor outside an actual org headline"))
 
-  (unless (or (null previous-heading)
-              (org-ol-tree-core--heading-p previous-heading))
-    (error "Given parent must be nil or an 'org-ol-tree-core--heading' object"))
+  (unless (or (null previous-headline)
+              (org-ol-tree-core--headline-p previous-headline))
+    (error "Given parent must be nil or an 'org-ol-tree-core--headline' object"))
 
-  (let* ((previous-level (if (null previous-heading)
+  (let* ((previous-level (if (null previous-headline)
                              0
-                           (org-ol-tree-core--heading-level previous-heading)))
-         (previous-id (when (org-ol-tree-core--heading-p previous-heading)
-                        (org-ol-tree-core--heading-id previous-heading)))
+                           (org-ol-tree-core--headline-level previous-headline)))
+         (previous-id (when (org-ol-tree-core--headline-p previous-headline)
+                        (org-ol-tree-core--headline-id previous-headline)))
          (this-components (org-heading-components))
          (this-name (nth 4 this-components))
-         (this-name (org-ol-tree-heading--split-progress this-name))
+         (this-name (org-ol-tree-headline--split-progress this-name))
          (this-progress (cdr this-name))
          (this-name (car this-name))
          (this-level (nth 0 this-components))
          (this-marker (point-marker))
          (this-parent (cond
                        ((= this-level previous-level)
-                        (org-ol-tree-core--heading-parent previous-heading))
-                       ((> this-level previous-level) previous-heading)
+                        (org-ol-tree-core--headline-parent previous-headline))
+                       ((> this-level previous-level) previous-headline)
                        ((< this-level previous-level)
-                        (let ((node previous-heading)
+                        (let ((node previous-headline)
                               (node-level previous-level))
                           (while (and (not (null node))
                                       (<= this-level node-level))
-                            (setq node (org-ol-tree-core--heading-parent node))
+                            (setq node (org-ol-tree-core--headline-parent node))
                             (if (null node)
                                 (setq node-level 0)
-                              (setq node-level (org-ol-tree-core--heading-level node))))
+                              (setq node-level (org-ol-tree-core--headline-level node))))
                           node))
                        (t nil)))
          (this-section-stack (org-ol-tree-core--next-section previous-id this-level))
          (this-section-id (org-ol-tree-core--section-string this-section-stack))
-         (this-heading (org-ol-tree-core--heading-create-internal :name this-name
+         (this-headline (org-ol-tree-core--headline-create-internal :name this-name
                                                                   :progress this-progress
                                                                   :id this-section-id
                                                                   :marker this-marker
                                                                   :level this-level
                                                                   :parent this-parent)))
     (when this-parent
-      (push this-heading (org-ol-tree-core--heading-subheadings this-parent)))
-    this-heading))
+      (push this-headline (org-ol-tree-core--headline-children this-parent)))
+    this-headline))
+
+
+(defun org-ol-tree-core--root-headline ()
+  "Return the headline object for the root node of the tree."
+  (declare (side-effect-free t))
+  (org-ol-tree-core--node-get :headline (org-ol-tree-core--root-node)))
+
+
+(defun org-ol-tree-core--current-headline ()
+  "Return the headline object for the tree node under the cursor.
+
+If cursor is outside a headline node, return nil."
+  (declare (side-effect-free t))
+  (org-ol-tree-core--node-get :headline))
+
+
+;;; --- Treemacs integration ---------------------------------------------------
+
+(defun org-ol-tree-core--root-node ()
+  "Return the treemacs button for the root node of the tree."
+  (declare (side-effect-free t))
+  (save-excursion
+    (goto-char (treemacs-project->position (treemacs-project-at-point)))
+    (org-ol-tree-core--current-node)))
 
 
 (defun org-ol-tree-core--current-node ()
   "Wrapper function around `treemacs-current-button' to allow mocks."
+  (declare (side-effect-free t))
   (treemacs-current-button))
 
 
-(defun org-ol-tree-core--heading-current ()
-  "Return the heading object for the tree node under the cursor.
+(defun org-ol-tree-core--node-get (property &optional node)
+  "Wrapper function around `treemacs-button-get' to allow mocks.
 
-If cursor is outside a heading node, return nil."
+Return the value of PROPERTY associated with NODE."
   (declare (side-effect-free t))
-  (get-text-property (org-ol-tree-core--current-node) :heading))
+  (treemacs-button-get (or node (org-ol-tree-core--current-node)) property))
+
+
+(defun org-ol-tree-core--node-put (property value &optional node)
+  "Wrapper function around `treemacs-button-put' to allow mocks.
+
+Set the VALUE of PROPERTY associated with NODE."
+  (declare (side-effect-free t))
+  (treemacs-button-put (or node (org-ol-tree-core--current-node)) property value))
 
 
 ;;; --- Document ---------------------------------------------------------------
 
-(defun org-ol-tree-core--doc-create (&optional buffer-or-name)
-  "Traverse BUFFER-OR-NAME buffer to create a tree-like structure for headings.
+(defun org-ol-tree-core--create-dom (&optional buffer-or-name)
+  "Traverse BUFFER-OR-NAME buffer to create a tree-like structure for headlines.
 
-This function uses the `outline-next-heading' function to traverse the org file
-and uses the cl-struct `org-ol-tree-core--heading' as node information.
+This function uses the `outline-next-headline' function to traverse the org file
+and uses the cl-struct `org-ol-tree-core--headline' as node information.
 
 If BUFFER-OR-NAME is nil, uses the `current-buffer'. If the given buffer is not
 an Org buffer, raises a `user-error'."
-  (let ((buffer (if buffer-or-name (get-buffer buffer-or-name) (current-buffer))))
+  (let ((buffer (if buffer-or-name
+                    (get-buffer buffer-or-name)
+                  (or org-ol-tree--org-buffer
+                      (current-buffer)))))
     (with-current-buffer buffer
       (unless (eq major-mode 'org-mode)
         (user-error "Can't traverse an Org document on a NON-Org buffer"))
@@ -554,45 +590,51 @@ an Org buffer, raises a `user-error'."
         (save-restriction
           (widen)
           (goto-char (point-min))
-          (let ((root (org-ol-tree-core--heading-create-internal
-                       :name (org-ol-tree-core--doc-name)
+          (let ((root (org-ol-tree-core--headline-create-internal
+                       :name (org-ol-tree-core--find-title)
                        :id "0"
                        :marker (point-min-marker)
                        :level 0))
-                current-heading)
+                current-headline)
             (while (outline-next-heading)
-              (let ((this-heading (org-ol-tree-core--heading-create current-heading)))
-                (unless (org-ol-tree-core--heading-parent this-heading)
-                  (push this-heading (org-ol-tree-core--heading-subheadings root)))
-                (setq current-heading this-heading)))
+              (let ((this-headline (org-ol-tree-core--create-headline current-headline)))
+                (unless (org-ol-tree-core--headline-parent this-headline)
+                  (push this-headline (org-ol-tree-core--headline-children root)))
+                (setq current-headline this-headline)))
             root))))))
 
 
-(defun org-ol-tree-core--doc-name ()
+(defun org-ol-tree-core--find-title (&optional buffer-or-name)
   "Return a string label for the outline root node.
 
-The label is given by the title on the target buffer if one is defined, by the
-file name of the target buffer transformed to title case, if the target buffer
-has a file associated with it, or by the target's buffer name transformed to
-title case."
-  (save-excursion
-    (goto-char (point-min))
-    (cond
-     ((re-search-forward org-ol-tree-core--title-re nil t)
-      (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
-     ((buffer-file-name)
-      (s-titleized-words (file-name-base (buffer-file-name))))
-     (t (s-titleized-words (buffer-name))))))
+The label is given by the title on the BUFFER-OR-NAME buffer if one is defined,
+by the file name of the target buffer transformed to title case, if the target
+buffer has a file associated with it, or by the target's buffer name
+transformed to title case."
+  (let ((buffer (if buffer-or-name
+                    (get-buffer buffer-or-name)
+                  (or org-ol-tree--org-buffer
+                      (current-buffer))))
+        (title-limit (* 1024 10)))
+    (with-current-buffer buffer
+      (save-excursion
+        (goto-char (point-min))
+        (cond
+         ((re-search-forward org-ol-tree-core--title-re title-limit t)
+          (buffer-substring-no-properties (match-beginning 1) (match-end 1)))
+         ((buffer-file-name)
+          (s-titleized-words (file-name-base (buffer-file-name))))
+         (t (s-titleized-words (buffer-name))))))))
 
 
 (defun org-ol-tree-core--doc ()
-  "Return the root heading for the outline in the current window.
+  "Return the root headline for the outline in the current window.
 
-The root heading is cached on a buffer local variable"
+The root headline is cached on a buffer local variable"
   (unless (and org-ol-tree-core--DOM (not org-ol-tree-core--rebuild-DOM-p))
     (when org-ol-tree--buffer-p
       (setq-local org-ol-tree-core--DOM
-                  (org-ol-tree-core--doc-create org-ol-tree--org-buffer))
+                  (org-ol-tree-core--create-dom org-ol-tree--org-buffer))
       (setq-local org-ol-tree-core--rebuild-DOM-p nil)))
   org-ol-tree-core--DOM)
 
@@ -628,17 +670,17 @@ check the `org-ol-tree-ui-icon-set' variable documentation."
            (member org-ol-tree-ui-icon-set '(all-the-icons iconless-fancy)))))
 
 
-(defun org-ol-tree-ui--expand-collapse-icon (heading state)
+(defun org-ol-tree-ui--expand-collapse-icon (headline state)
   "Return the string used for the collapse or expand symbol on sections.
 
-If the HEADING used to get this icon does not have sub-sections, this function
-returns two white spaces used to align with the collapsable headings.
+If the HEADLINE used to get this icon does not have children, this function
+returns two white spaces used to align with the collapsable headlines.
 
 The STATE argument indicates if this icon should represent an open or closed
 node.Valid values for STATE are 'expanded,'collapsed, and nil. In practice, this
 function considers the state as 'collapsed for any value non nil and different
 than 'expanded."
-  (if (org-ol-tree-core--heading-subheadings heading)
+  (if (org-ol-tree-core--headline-children headline)
       (let ((expanded-icon (plist-get org-ol-tree-ui--icon-set :expanded))
             (collapsed-icon (plist-get org-ol-tree-ui--icon-set :collapsed)))
         (if (org-ol-tree-ui--use-fancy-icons-p)
@@ -662,18 +704,18 @@ than 'expanded."
      (when display-p " "))))
 
 
-(defun org-ol-tree-ui--section-icon (heading state)
-  "Return the full icon for the giving HEADING.
+(defun org-ol-tree-ui--section-icon (headline state)
+  "Return the full icon for the giving HEADLINE.
 
 The icon depends on the icon theme configuration as well as the given STATE
-of the HEADING."
+of the HEADLINE."
   (let ((section-icon (plist-get org-ol-tree-ui--icon-set :section)))
   (concat
    " "
-   (org-ol-tree-ui--expand-collapse-icon heading state)
+   (org-ol-tree-ui--expand-collapse-icon headline state)
    (when (> (length section-icon) 0)
      (propertize
-      (format "%s " (s-replace "%(section)" (org-ol-tree-core--heading-id heading) section-icon))
+      (format "%s " (s-replace "%(section)" (org-ol-tree-core--headline-id headline) section-icon))
       'face
       'org-ol-tree-section-title-face)))))
 
@@ -939,7 +981,7 @@ The majority of the code in this function was copied from the Emacs function
        (save-excursion
          (add-text-properties (point-at-bol)
                               (point-at-eol)
-                              (list :heading org-ol-tree-core--DOM))
+                              (list :headline org-ol-tree-core--DOM))
          (goto-char (point-max))
          (insert "\n"))))))
 
@@ -982,21 +1024,18 @@ The argument EVENT, is the same event received by the
     (when (region-active-p)
       (keyboard-quit))
 
-    (when-let ((heading (org-ol-tree-core--heading-current)))
-      (treemacs-with-current-button
-       "No heading node found under the cursor"
-       (if (org-ol-tree-core--heading-subheadings heading)
-           (pcase (treemacs-button-get current-btn :state)
-             ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
-             ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
-             ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))
-             ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))
-         (org-ol-tree-action--visit)))
-      (treemacs--evade-image))))
+    (when-let ((headline (org-ol-tree-core--current-headline)))
+      (if (org-ol-tree-core--headline-children headline)
+          (pcase (org-ol-tree-core--node-get :state)
+            ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
+            ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
+            ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))
+            ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))
+        (org-ol-tree-action--visit)))))
 
 
 (defun org-ol-tree-action--doubleclick (event)
-  "Visit the clicked heading from EVENT.
+  "Visit the clicked headline from EVENT.
 
 This function cancels any timer call from `org-ol-tree-action--leftclick'."
   (interactive "e")
@@ -1017,20 +1056,19 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
 ;;; --- Navigation --------------------------------------------------------------
 
 (defun org-ol-tree-action--goto-child (position &optional target-state)
-  "Move cursor to the current heading subheading on POSITION.
+  "Move cursor to the current headline child on POSITION.
 
 If TARGET-STATE is passed, this function will make sure the child hading is
 `collapsed' or `expanded', depending on the symbol passed."
-  (let* ((ol-button (org-ol-tree-core--current-node))
-         (ol-state (treemacs-button-get ol-button :state))
-         (heading (org-ol-tree-core--heading-current))
-         (subheadings (org-ol-tree-core--heading-subheadings heading)))
+  (let* ((ol-state (org-ol-tree-core--node-get :state))
+         (headline (org-ol-tree-core--current-headline))
+         (children (org-ol-tree-core--headline-children headline)))
 
-    (unless (and ol-button ol-state heading)
+    (unless (and ol-state headline)
       (user-error "Cursor is not on a valid section"))
 
-    (unless (>= (length subheadings) position)
-      (user-error "Section under cursor does not have any subsection on position %s" position))
+    (unless (>= (length children) position)
+      (user-error "Section under cursor does not have any children on position %s" position))
 
     (when (eq ol-state 'treemacs-org-ol-doc-closed-state)
       (treemacs-expand-org-ol-doc))
@@ -1082,11 +1120,9 @@ state is collapsed, the parent not will be selected."
 If the cursor is not on top of an expanded section, calling this function has no
 effect."
   (interactive)
-  (treemacs-with-current-button
-   "No heading node found under the cursor"
-   (pcase (treemacs-button-get current-btn :state)
-     ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
-     ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section)))))
+  (pcase (org-ol-tree-core--node-get :state)
+    ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
+    ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))))
 
 
 (defun org-ol-tree-action--expand ()
@@ -1095,11 +1131,9 @@ effect."
 If the cursor is not on top of a collapsed section, calling this function has no
 effect."
   (interactive)
-  (treemacs-with-current-button
-   "No heading node found under the cursor"
-   (pcase (treemacs-button-get current-btn :state)
-     ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
-     ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))))
+  (pcase (org-ol-tree-core--node-get :state)
+    ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
+    ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section))))
 
 
 (defun org-ol-tree-action--move-to (target-point)
@@ -1122,8 +1156,8 @@ If the buffer is narrowed, it will get widen as a side effect of this function."
     (org-narrow-to-subtree)))
 
 
-(defun org-ol-tree-action--focus-on-heading (narrow-p)
-  "Focus this Org buffer on the current heading.
+(defun org-ol-tree-action--focus-on-headline (narrow-p)
+  "Focus this Org buffer on the current headline.
 
 If NARROW-P is non nil, it toggles the narrowed state. For instance, if your
 buffer is not narrowed, invoking this function with a prefix argument causes
@@ -1134,12 +1168,12 @@ argument again, which causes the buffer to get widen."
                           org-ol-tree--org-buffer))
              (doc-window (or (get-buffer-window org-ol-tree--org-buffer)
                              (next-window)))
-             (heading (org-ol-tree-core--heading-current))
-             (heading-marker (org-ol-tree-core--heading-marker heading)))
+             (headline (org-ol-tree-core--current-headline))
+             (headline-marker (org-ol-tree-core--headline-marker headline)))
         (select-window doc-window)
         (switch-to-buffer buffer)
         (let ((current-narrow (buffer-narrowed-p)))
-          (org-ol-tree-action--move-to heading-marker)
+          (org-ol-tree-action--move-to headline-marker)
           (org-ol-tree-action--narrow-buffer-maybe narrow-p current-narrow)
           t)))
 
@@ -1155,7 +1189,7 @@ the selected section, until you call it with th universal argument again, which
 causes the buffer to get widen."
   (interactive "P")
 
-  (unless (org-ol-tree-action--focus-on-heading narrow-p)
+  (unless (org-ol-tree-action--focus-on-headline narrow-p)
     (user-error "No section information found on current point"))
 
   (when (or (not org-ol-tree-action-move-to-target) org-ol-tree-action-close-on-selected)
@@ -1183,22 +1217,22 @@ If the current document does not have a title defined by '#+TITLE:', a
       (insert (format "#+TITLE: %s\n" new-title)))))
 
 
-(defun org-ol-tree-action--rename-section (heading-point todo-progress new-name)
-  "Rename a section on HEADING-POINT to NEW-NAME.
+(defun org-ol-tree-action--rename-section (headline-point todo-progress new-name)
+  "Rename a section on HEADLINE-POINT to NEW-NAME.
 
 TODO-PROGRESS is the text defining the progress of a multi-task TODO at the end
 of the headline. For instance, on the section \"Section Title [2/3]\", the
 TODO-PROGRESS should be \"[2/3]\"."
   (save-excursion
-    (goto-char heading-point)
+    (goto-char headline-point)
     (org-edit-headline (concat
                         new-name
                         (when todo-progress
                           (format " %s" todo-progress))))))
 
 
-(defun org-ol-tree-action--rename (&optional heading new-title current-name)
-  "Rename HEADING to NEW-TITLE.
+(defun org-ol-tree-action--rename (&optional headline new-title current-name)
+  "Rename HEADLINE to NEW-TITLE.
 
 If the cursor is on top of the root node, the rename will change thee document
 title.
@@ -1206,14 +1240,14 @@ title.
 If CURRENT-NAME is given, this function does not retrieve the node current name
 for comparison and uses the provided name instead."
   (interactive
-   (let* ((heading (org-ol-tree-core--heading-current))
-          (current-name (org-ol-tree-core--heading-name heading)))
-     (list heading (read-string "New name: " current-name) current-name)))
-  (let ((marker (org-ol-tree-core--heading-marker heading))
-        (progress (org-ol-tree-core--heading-progress heading)))
+   (let* ((headline (org-ol-tree-core--current-headline))
+          (current-name (org-ol-tree-core--headline-name headline)))
+     (list headline (read-string "New name: " current-name) current-name)))
+  (let ((marker (org-ol-tree-core--headline-marker headline))
+        (progress (org-ol-tree-core--headline-progress headline)))
     (when (not (equal current-name new-title))
-      (setf (org-ol-tree-core--heading-name heading) new-title)
-      (if (eq heading org-ol-tree-core--DOM)
+      (setf (org-ol-tree-core--headline-name headline) new-title)
+      (if (eq headline org-ol-tree-core--DOM)
           (progn
             (org-ol-tree-ui--rebuild-tree)
             (with-current-buffer org-ol-tree--org-buffer
@@ -1237,10 +1271,10 @@ without refreshing the base data."
       (let ((org-ol-tree-core--rebuild-DOM-p t))
         (org-ol-tree-core--doc)))
 
-    (let ((current-heading (org-ol-tree-core--heading-current)))
+    (let ((current-headline (org-ol-tree-core--current-headline)))
       (org-ol-tree-action--goto-root)
       (treemacs-collapse-org-ol-doc)
-      (org-ol-tree-action--goto-setion (org-ol-tree-core--heading-id current-heading)))))
+      (org-ol-tree-action--goto-setion (org-ol-tree-core--headline-id current-headline)))))
 
 
 (defun org-ol-tree-action--filewatch-callback (event)
@@ -1345,23 +1379,25 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
 
 
 (treemacs-define-expandable-node org-ol-parent-section
-  :icon-open-form (org-ol-tree-ui--section-icon (treemacs-button-get node :heading) 'expanded)
-  :icon-closed-form (org-ol-tree-ui--section-icon (treemacs-button-get node :heading)
-                                                      'collapsed)
+  :icon-open-form (org-ol-tree-ui--section-icon (org-ol-tree-core--node-get :headline node)
+                                                'expanded)
+  :icon-closed-form (org-ol-tree-ui--section-icon (org-ol-tree-core--node-get :headline node)
+                                                  'collapsed)
   :ret-action 'org-ol-tree-action--visit
   :after-expand (org-ol-tree-ui--window-resize)
   :after-collapse (org-ol-tree-ui--window-resize)
   :query-function (reverse
-                   (org-ol-tree-core--heading-subheadings (treemacs-button-get node :heading)))
+                   (org-ol-tree-core--headline-children
+                    (org-ol-tree-core--node-get :headline node)))
   :render-action
   (treemacs-render-node :icon (org-ol-tree-ui--section-icon item 'collapsed)
-                        :label-form (org-ol-tree-core--heading-name item)
-                        :state (if (org-ol-tree-core--heading-subheadings item)
+                        :label-form (org-ol-tree-core--headline-name item)
+                        :state (if (org-ol-tree-core--headline-children item)
                                    treemacs-org-ol-parent-section-closed-state
                                  treemacs-org-ol-section-state)
-                        :key-form (org-ol-tree-core--heading-id item)
+                        :key-form (org-ol-tree-core--headline-id item)
                         :face 'org-ol-tree-section-id-face
-                        :more-properties (:heading item)))
+                        :more-properties (:headline item)))
 
 
 (treemacs-define-expandable-node org-ol-doc
@@ -1370,18 +1406,18 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
   :ret-action 'org-ol-tree-action--visit
   :after-expand (org-ol-tree-ui--window-resize)
   :after-collapse (org-ol-tree-ui--window-resize)
-  :query-function (reverse (org-ol-tree-core--heading-subheadings (org-ol-tree-core--doc)))
+  :query-function (reverse (org-ol-tree-core--headline-children (org-ol-tree-core--doc)))
   :top-level-marker t
   :root-face 'org-ol-tree-document-face
-  :root-key-form (org-ol-tree-core--heading-id (org-ol-tree-core--doc))
-  :root-label (org-ol-tree-core--heading-name (org-ol-tree-core--doc))
+  :root-key-form (org-ol-tree-core--headline-id (org-ol-tree-core--doc))
+  :root-label (org-ol-tree-core--headline-name (org-ol-tree-core--doc))
   :render-action
   (treemacs-render-node :icon (org-ol-tree-ui--section-icon item 'collapsed)
-                        :label-form (org-ol-tree-core--heading-name item)
+                        :label-form (org-ol-tree-core--headline-name item)
                         :state treemacs-org-ol-parent-section-closed-state
-                        :key-form (org-ol-tree-core--heading-id item)
+                        :key-form (org-ol-tree-core--headline-id item)
                         :face 'org-ol-tree-section-id-face
-                        :more-properties (:heading item)))
+                        :more-properties (:headline item)))
 
 
 
