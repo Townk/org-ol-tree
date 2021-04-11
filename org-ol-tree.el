@@ -312,13 +312,11 @@ The outline chooses the theme based on the following criteria:
 
 (defun org-ol-tree-system--all-the-icons-p ()
   "Constant indicating if package all-the-icons is installed."
-  (declare (side-effect-free t))
   (fboundp 'all-the-icons-material))
 
 
 (defun org-ol-tree-system--evil-p ()
   "Constant indicating if package evil is installed."
-  (declare (side-effect-free t))
   (and (fboundp 'evil-define-key)
         (fboundp 'evil-window-top)
         (fboundp 'evil-window-middle)
@@ -329,7 +327,6 @@ The outline chooses the theme based on the following criteria:
 
 To find out if Emacs is running in GUI mode, we query the variable
 `window-system'."
-  (declare (side-effect-free t))
   (member window-system '(x w32 ns)))
 
 
@@ -516,7 +513,6 @@ this functions raises a user error."
 
 (defun org-ol-tree-core--root-headline ()
   "Return the headline object for the root node of the tree."
-  (declare (side-effect-free t))
   (org-ol-tree-core--node-get :headline (org-ol-tree-core--root-node)))
 
 
@@ -524,15 +520,35 @@ this functions raises a user error."
   "Return the headline object for the tree node under the cursor.
 
 If cursor is outside a headline node, return nil."
-  (declare (side-effect-free t))
   (org-ol-tree-core--node-get :headline))
 
 
 ;;; --- Treemacs integration ---------------------------------------------------
 
+(defun org-ol-tree-core--root-path ()
+  "Return the treemacs path to the root node."
+  '(:custom root))
+
+
+(defun org-ol-tree-core--section-path (&optional section-id skip-root)
+  "Return the path list for the given SECTION-ID.
+
+If SECTION-ID is nil, uses the headline id of current node.
+
+If SKIP-ROOT is non nil, it will not include the initial path of
+`org-ol-tree-core--root-path'."
+  (append (unless skip-root (org-ol-tree-core--root-path))
+          (-reduce-from
+           (lambda (acc-list elm)
+             (-snoc acc-list (mapconcat 'identity (-snoc (last acc-list) elm) ".")))
+           nil
+           (split-string
+            (or section-id (org-ol-tree-core--headline-id (org-ol-tree-core--current-headline)))
+            "\\."))))
+
+
 (defun org-ol-tree-core--root-node ()
   "Return the treemacs button for the root node of the tree."
-  (declare (side-effect-free t))
   (save-excursion
     (goto-char (treemacs-project->position (treemacs-project-at-point)))
     (org-ol-tree-core--current-node)))
@@ -540,7 +556,6 @@ If cursor is outside a headline node, return nil."
 
 (defun org-ol-tree-core--current-node ()
   "Wrapper function around `treemacs-current-button' to allow mocks."
-  (declare (side-effect-free t))
   (treemacs-current-button))
 
 
@@ -548,7 +563,6 @@ If cursor is outside a headline node, return nil."
   "Wrapper function around `treemacs-button-get' to allow mocks.
 
 Return the value of PROPERTY associated with NODE."
-  (declare (side-effect-free t))
   (treemacs-button-get (or node (org-ol-tree-core--current-node)) property))
 
 
@@ -556,7 +570,6 @@ Return the value of PROPERTY associated with NODE."
   "Wrapper function around `treemacs-button-put' to allow mocks.
 
 Set the VALUE of PROPERTY associated with NODE."
-  (declare (side-effect-free t))
   (treemacs-button-put (or node (org-ol-tree-core--current-node)) property value))
 
 
@@ -565,7 +578,7 @@ Set the VALUE of PROPERTY associated with NODE."
 (defun org-ol-tree-core--create-dom (&optional buffer-or-name)
   "Traverse BUFFER-OR-NAME buffer to create a tree-like structure for headlines.
 
-This function uses the `outline-next-headline' function to traverse the org file
+This function uses the `outline-next-heading' function to traverse the org file
 and uses the cl-struct `org-ol-tree-core--headline' as node information.
 
 If BUFFER-OR-NAME is nil, uses the `current-buffer'. If the given buffer is not
@@ -768,7 +781,6 @@ displays the Outline buufer into it."
   "Return the window displaying the org-ol-tree buffer for the current org file.
 
 Returns nil if no org-ol-tree buffer is visible."
-  (declare (side-effect-free error-free))
   (if org-ol-tree--buffer-p
       (selected-window)
     (when (buffer-live-p org-ol-tree--buffer)
@@ -778,7 +790,6 @@ Returns nil if no org-ol-tree buffer is visible."
 (defun org-ol-tree-ui--visibility ()
   "Return whether the current visibility state of the org-ol-tree buffer.
 Valid states are 'visible, 'exists and 'none."
-  (declare (side-effect-free t))
   (cond
    ((org-ol-tree-ui--get-window) 'visible)
    ((buffer-live-p org-ol-tree--buffer) 'exists)
@@ -790,7 +801,6 @@ Valid states are 'visible, 'exists and 'none."
 
 This function takes in account the value of `org-ol-tree-ui-window-use-pixel'
 and if this frame is a graphical frame or not."
-  (declare (side-effect-free t))
   (and (org-ol-tree-system--graphical-frame-p)
         org-ol-tree-ui-window-use-pixel))
 
@@ -1034,53 +1044,23 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
 
 ;;; --- Navigation --------------------------------------------------------------
 
-(defun org-ol-tree-action--goto-child (position &optional target-state)
-  "Move cursor to the current headline child on POSITION.
-
-If TARGET-STATE is passed, this function will make sure the child hading is
-`collapsed' or `expanded', depending on the symbol passed."
-  (let* ((ol-state (org-ol-tree-core--node-get :state))
-         (headline (org-ol-tree-core--current-headline))
-         (children (org-ol-tree-core--headline-children headline)))
-
-    (unless (and ol-state headline)
-      (user-error "Cursor is not on a valid section"))
-
-    (unless (>= (length children) position)
-      (user-error "Section under cursor does not have any children on position %s" position))
-
-    (when (eq ol-state 'treemacs-org-ol-doc-closed-state)
-      (treemacs-expand-org-ol-doc))
-
-    (when (eq ol-state 'treemacs-org-ol-parent-section-closed-state)
-      (treemacs-expand-org-ol-parent-section))
-
-    (treemacs-next-line position)
-
-    (when target-state
-      (pcase target-state
-        ('expanded (treemacs-expand-org-ol-parent-section))
-        ('collapsed (treemacs-collapse-org-ol-parent-section))
-        ('treemacs-org-ol-parent-section-open-state (treemacs-expand-org-ol-parent-section))
-        ('treemacs-org-ol-parent-section-closed-state (treemacs-collapse-org-ol-parent-section))
-        (_ (user-error "Unrecognized state %s" target-state))))))
-
-
 (defun org-ol-tree-action--goto-setion (section-id)
   "Move the cursor to the section with id SECTION-ID.
 
 This function expands any node necessary to reach the proper section. If a
 section with the given SECTION-ID does not exists, an `user-error' is raised."
-  (let* ((path (mapcar 'string-to-number (split-string section-id "\\."))))
-    (org-ol-tree-action--goto-root)
-    (while (> (length path) 0)
-      (org-ol-tree-action--goto-child (pop path)))))
+  (let ((current-path (org-ol-tree-core--root-path))
+        (target-path (org-ol-tree-core--section-path section-id t)))
+    (while target-path
+      (setq current-path (append current-path (list (pop target-path))))
+      (treemacs-goto-node current-path)))
+  (goto-char (point-at-bol)))
 
 
 (defun org-ol-tree-action--goto-root ()
   "Move the cursor to the outline root node."
   (interactive)
-  (treemacs-goto-node '(:custom "0")))
+  (treemacs-goto-node (org-ol-tree-core--root-path)))
 
 
 (defun org-ol-tree-action--goto-last-node ()
@@ -1239,22 +1219,25 @@ for comparison and uses the provided name instead."
 
 ;;; --- Refresh -----------------------------------------------------------------
 
-(defun org-ol-tree-action--refresh (&optional prevent-rebuild)
+(defun org-ol-tree-action--refresh (&optional prevent-rebuild target-section-id)
   "Refresh the Outline tree.
 
 If PREVENT-REBUILD is non nil, this function just refresh the buffer content
-without refreshing the base data."
+without refreshing the base data.
+
+If TARGET-SECTION-ID is not nil, uses it instead of the current headline id."
   (interactive)
 
   (when org-ol-tree--buffer-p
-    (unless prevent-rebuild
-      (let ((org-ol-tree-core--rebuild-DOM-p t))
-        (org-ol-tree-core--doc)))
+    (let ((current-section-id
+           (or target-section-id
+               (org-ol-tree-core--headline-id (org-ol-tree-core--current-headline)))))
+      (unless prevent-rebuild
+        (org-ol-tree-ui--build-outline-tree))
 
-    (let ((current-headline (org-ol-tree-core--current-headline)))
       (org-ol-tree-action--goto-root)
       (treemacs-collapse-org-ol-doc)
-      (org-ol-tree-action--goto-setion (org-ol-tree-core--headline-id current-headline)))))
+      (org-ol-tree-action--goto-setion current-section-id))))
 
 
 (defun org-ol-tree-action--filewatch-callback (event)
@@ -1272,7 +1255,7 @@ For more information on EVENT, check the documentation of
             (progn
               (when (eq (org-ol-tree-ui--visibility) 'visible)
                 (select-window (get-buffer-window ol-buffer))
-                (org-ol-tree-action--refresh nil)
+                (org-ol-tree-action--refresh)
                 (select-window current-window)))
           (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
           (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
@@ -1508,7 +1491,7 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
     ('exists
      (org-ol-tree-ui--setup-buffer)
      (org-ol-tree-ui--setup-window t)
-     (org-ol-tree-action--refresh nil))
+     (org-ol-tree-action--refresh))
     ('none
      (org-ol-tree-action--init))))
 
