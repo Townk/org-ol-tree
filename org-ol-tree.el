@@ -582,6 +582,37 @@ Set the VALUE of PROPERTY associated with NODE."
   (treemacs-button-put (or node (org-ol-tree-core--current-node)) property value))
 
 
+(defun org-ol-tree-core--state (&optional treemacs-state)
+  "Translate a TREEMACS-STATE into an org-ol-tree one.
+
+Possible values this function return are `expanded', `collapsed' and nil. A nil
+value means the given TREEMACS-STATE is from a leaf node."
+  (pcase (or treemacs-state (org-ol-tree-core--node-get :state))
+    ('treemacs-org-ol-doc-open-state 'expanded)
+    ('treemacs-org-ol-doc-closed-state 'collapsed)
+    ('treemacs-org-ol-parent-section-open-state 'expanded)
+    ('treemacs-org-ol-parent-section-closed-state 'collapsed)
+    (_ nil)))
+
+
+(defun org-ol-tree-core--collapse (&optional node)
+  "Close the tree NODE if it can be closed.
+
+If NODE is nil, use node under the cursor."
+  (pcase (org-ol-tree-core--node-get :state node)
+    ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
+    ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))))
+
+
+(defun org-ol-tree-core--expand (&optional node)
+  "Open the tree NODE if it can be opened
+
+If NODE is nil, use node under the cursor."
+  (pcase (org-ol-tree-core--node-get :state node)
+    ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
+    ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section))))
+
+
 ;;; --- Document ---------------------------------------------------------------
 
 (defun org-ol-tree-core--create-dom (&optional buffer-or-name)
@@ -981,10 +1012,7 @@ The majority of the code in this function was copied from the Emacs function
        (treemacs-ORG-OL-DOC-extension)
        (org-ol-tree-core--node-put :headline (org-ol-tree-core--create-dom)
                                    (org-ol-tree-core--root-node))
-       (treemacs-expand-org-ol-doc)
-       (save-excursion
-         (goto-char (point-max))
-         (insert "\n"))))))
+       (org-ol-tree-core--expand)))))
 
 
 
@@ -1025,14 +1053,11 @@ The argument EVENT, is the same event received by the
     (when (region-active-p)
       (keyboard-quit))
 
-    (when-let ((headline (org-ol-tree-core--current-headline)))
-      (if (org-ol-tree-core--headline-children headline)
-          (pcase (org-ol-tree-core--node-get :state)
-            ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
-            ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
-            ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))
-            ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section)))
-        (org-ol-tree-action--visit)))))
+    (let ((currrent-state (org-ol-tree-core--state)))
+      (pcase (org-ol-tree-core--state)
+        ('collapsed (org-ol-tree-core--expand))
+        ('expanded (org-ol-tree-core--collapse))
+        (_ (org-ol-tree-action--visit))))))
 
 
 (defun org-ol-tree-action--doubleclick (event)
@@ -1056,17 +1081,27 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
 
 ;;; --- Navigation --------------------------------------------------------------
 
-(defun org-ol-tree-action--goto-setion (section-id)
+(defun org-ol-tree-action--goto-setion (section-id &optional target-state)
   "Move the cursor to the section with id SECTION-ID.
 
 This function expands any node necessary to reach the proper section. If a
-section with the given SECTION-ID does not exists, an `user-error' is raised."
+section with the given SECTION-ID does not exists, an `user-error' is raised.
+
+If TARGET-STATE is non nil, make sure the selected node is on the corresponding
+target state, if it's applicable to the target node."
   (let ((current-path (org-ol-tree-core--root-path))
         (target-path (org-ol-tree-core--section-path section-id t)))
+    (message "* * * request to go to %s, with state %s" section-id target-state)
     (while target-path
       (setq current-path (append current-path (list (pop target-path))))
-      (treemacs-goto-node current-path)))
-  (goto-char (point-at-bol)))
+      (message "* * * will go to path %s" current-path)
+      (treemacs-goto-node current-path))
+
+    (goto-char (point-at-bol))
+
+    (pcase target-state
+      ('expanded (org-ol-tree-core--expand))
+      ('collapsed (org-ol-tree-core--collapse)))))
 
 
 (defun org-ol-tree-action--goto-root ()
@@ -1091,9 +1126,7 @@ state is collapsed, the parent not will be selected."
 If the cursor is not on top of an expanded section, calling this function has no
 effect."
   (interactive)
-  (pcase (org-ol-tree-core--node-get :state)
-    ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
-    ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))))
+  (org-ol-tree-core--collapse))
 
 
 (defun org-ol-tree-action--expand ()
@@ -1102,9 +1135,7 @@ effect."
 If the cursor is not on top of a collapsed section, calling this function has no
 effect."
   (interactive)
-  (pcase (org-ol-tree-core--node-get :state)
-    ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
-    ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section))))
+  (org-ol-tree-core--expand))
 
 
 (defun org-ol-tree-action--move-to (target-point)
@@ -1231,25 +1262,31 @@ for comparison and uses the provided name instead."
 
 ;;; --- Refresh -----------------------------------------------------------------
 
-(defun org-ol-tree-action--refresh (&optional prevent-rebuild target-section-id)
+(defun org-ol-tree-action--refresh (&optional prevent-rebuild target-section-id target-state)
   "Refresh the Outline tree.
 
 If PREVENT-REBUILD is non nil, this function just refresh the buffer content
 without refreshing the base data.
 
 If TARGET-SECTION-ID is not nil, uses it instead of the current headline id.
+
+If TARGET-STATE is not nil, use it instead of the one on the current headline."
   (interactive)
 
   (when org-ol-tree--buffer-p
-    (let ((current-section-id
-           (or target-section-id
-               (org-ol-tree-core--headline-id (org-ol-tree-core--current-headline)))))
+    (let* ((headline (org-ol-tree-core--current-headline))
+           (target-section-id (or target-section-id (when headline
+                                                      (org-ol-tree-core--headline-id headline))))
+           (target-state (or target-state
+                             (org-ol-tree-core--state (org-ol-tree-core--node-get :state)))))
+
       (unless prevent-rebuild
         (org-ol-tree-ui--build-outline-tree))
 
       (org-ol-tree-action--goto-root)
-      (treemacs-collapse-org-ol-doc)
-      (org-ol-tree-action--goto-setion current-section-id))))
+      (org-ol-tree-core--collapse)
+      (org-ol-tree-action--goto-setion target-section-id target-state)
+      (message "Refresh completed"))))
 
 
 (defun org-ol-tree-action--filewatch-callback (event)
@@ -1297,6 +1334,97 @@ For more information on EVENT, check the documentation of
       (ht-remove! org-ol-tree-action--watcher-buffers watcher)
       (ht-remove! org-ol-tree-action--buffer-watchers buffer)
       (file-notify-rm-watch watcher))))
+
+;;; --- Move headlines -----------------------------------------------------------
+
+(defun org-ol-tre-action--promote-node (promote-tree)
+  "Move headline and its contents to a higher level.
+
+A higher level in this context, means a parent level.
+
+If PROMOTE-TREE is non nil, all childs of current headline, will be
+promoted as well."
+  (when org-ol-tree--buffer-p
+    (let* ((headline (org-ol-tree-core--current-headline))
+           (headline-point (org-ol-tree-core--headline-marker headline))
+           (headline-id (org-ol-tree-core--headline-id headline))
+           (headline-level (org-ol-tree-core--headline-level headline))
+           (parent (org-ol-tree-core--headline-parent headline))
+           (parent-level (if parent (org-ol-tree-core--headline-level parent) 0))
+           (target-id (org-ol-tree-core--section-string
+                       (if (> (- headline-level parent-level) 1)
+                           (cdr (org-ol-tree-core--section-from-string headline-id))
+                         (org-ol-tree-core--next-section headline-id (1- headline-level))))))
+      (when (> headline-level 1)
+        (with-current-buffer org-ol-tree--org-buffer
+          (save-excursion
+            (goto-char headline-point)
+            (if promote-tree
+                (org-promote-subtree)
+              (org-promote))))
+        (org-ol-tree-action--refresh nil target-id)))))
+
+
+(defun org-ol-tre-action--promote-section ()
+  "Move headline and its contents to a higher level.
+
+A higher level in this context, means a parent level. This function does not
+promote any child of current headline."
+  (interactive)
+  (org-ol-tre-action--promote-node nil))
+
+
+(defun org-ol-tre-action--promote-section-tree ()
+  "Move headline, its contents, and its childs to a higher level.
+
+A higher level in this context, means a parent level."
+  (interactive)
+  (org-ol-tre-action--promote-node t))
+
+
+(defun org-ol-tre-action--demote-node (demote-tree)
+  "Move headline and its contents to a higher level.
+
+A higher level in this context, means a parent level.
+
+If DEMOTE-TREE is non nil, all childs of current headline, will be
+promoted as well."
+  (interactive)
+  (when org-ol-tree--buffer-p
+    (let* ((headline-state (org-ol-tree-core--state (org-ol-tree-core--node-get :state)))
+           (headline (org-ol-tree-core--current-headline))
+           (headline-point (org-ol-tree-core--headline-marker headline))
+           (headline-id (org-ol-tree-core--headline-id headline))
+           (headline-level (org-ol-tree-core--headline-level headline))
+           (target-id (org-ol-tree-core--section-from-string headline-id))
+           (target-id (append (list (max 1 (1- (car target-id)))) (cdr target-id)))
+           (target-id (org-ol-tree-core--section-string
+                       (org-ol-tree-core--next-section target-id (1+ headline-level)))))
+      (message "* * * Target id: %s" target-id)
+      (when (> headline-level 0)
+        (with-current-buffer org-ol-tree--org-buffer
+          (save-excursion
+            (goto-char headline-point)
+            (if demote-tree
+                (org-demote-subtree)
+              (org-demote))))
+        (org-ol-tree-action--refresh nil target-id headline-state)))))
+
+
+(defun org-ol-tre-action--demote-section ()
+  "Move headline and its contents to a higher level.
+
+A higher level in this context, means a parent level."
+  (interactive)
+  (org-ol-tre-action--demote-node nil))
+
+
+(defun org-ol-tre-action--demote-section-tree ()
+  "Move headline and its contents to a higher level.
+
+A higher level in this context, means a parent level."
+  (interactive)
+  (org-ol-tre-action--demote-node t))
 
 
 ;;; --- Setup / Tear down -------------------------------------------------------
@@ -1408,7 +1536,10 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
              (define-key map "q"              #'org-ol-tree-action--quit)
              (define-key map "R"              #'org-ol-tree-action--rename)
              (define-key map "r"              #'org-ol-tree-action--refresh)
-
+             (define-key map (kbd "<M-left>")    #'org-ol-tre-action--promote-section)
+             (define-key map (kbd "<M-S-left>")  #'org-ol-tre-action--promote-section)
+             (define-key map (kbd "<M-right>")   #'org-ol-tre-action--demote-section)
+             (define-key map (kbd "<M-S-right>") #'org-ol-tre-action--demote-section)
 
              ;; ignore treemacs bindings
 
@@ -1441,13 +1572,33 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
     (kbd "<right>") #'org-ol-tree-action--expand
     "h"             #'org-ol-tree-action--collapse
     (kbd "<left>")  #'org-ol-tree-action--collapse
+
     "gg"            #'org-ol-tree-action--goto-root
     (kbd "<home>")  #'org-ol-tree-action--goto-root
     "G"             #'org-ol-tree-action--goto-last-node
     (kbd "<end>")   #'org-ol-tree-action--goto-last-node
+
     "q" #'org-ol-tree-action--quit
+
     "R" #'org-ol-tree-action--rename
+
     "r" #'org-ol-tree-action--refresh
+
+    "s" nil
+    "sh"                 #'org-ol-tre-action--promote-section
+    "sH"                 #'org-ol-tre-action--promote-section-tree
+    (kbd "<M-left>")     #'org-ol-tre-action--promote-section
+    (kbd "<M-S-left>")   #'org-ol-tre-action--promote-section-tree
+    "\M-h"               #'org-ol-tre-action--promote-section
+    "\M-H"               #'org-ol-tre-action--promote-section-tree
+
+    "sl"                 #'org-ol-tre-action--demote-section
+    "sL"                 #'org-ol-tre-action--demote-section-tree
+    (kbd "<M-rightt>")   #'org-ol-tre-action--demote-section
+    (kbd "<M-S-rightt>") #'org-ol-tre-action--demote-section-tree
+    "\M-l"               #'org-ol-tre-action--demote-section
+    "\M-L"               #'org-ol-tre-action--demote-section-tree
+
     "H" #'(lambda () (interactive) (evil-window-top) (goto-char (point-at-bol)))
     "M" #'(lambda () (interactive) (evil-window-middle) (goto-char (point-at-bol)))
     "L" #'(lambda () (interactive) (evil-window-bottom) (goto-char (point-at-bol)))
@@ -1473,7 +1624,6 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
     "gr" 'ignore
     "m" 'ignore
     "o" 'ignore
-    "s" 'ignore
     "t" 'ignore
     "w" 'ignore
     "y" 'ignore))
