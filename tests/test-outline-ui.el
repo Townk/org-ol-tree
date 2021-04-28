@@ -1,4 +1,4 @@
-;;; test-outline-ui.el --- Sections and Headings tests -*- lexical-binding: t; -*-
+;;; test-outline-ui.el --- Sections and Headlines tests -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2021 Thiago Alves
 ;;
@@ -7,7 +7,7 @@
 ;;; Commentary:
 ;;
 ;; This file contains all tests related to the core objects (currently
-;; 'sections' and 'headings').
+;; 'sections' and 'headlines').
 ;;
 ;; Since reading the test might be tedious, I'm reproducing here the transcript
 ;; of the behaviors being tested by this file:
@@ -106,7 +106,7 @@
         (expect 'org-ol-tree-system--all-the-icons-p :to-have-been-called-times 0))))
 
   (describe "Given a document icon,"
-      :var (org-ol-tree-ui-icon-set)
+    :var (org-ol-tree-ui-icon-set)
 
     (describe "when it is nil in the icon set,"
       (it "it should have a single white space representing the cursor column"
@@ -138,13 +138,13 @@
           icon)
 
     (describe "when the section used to get the icon has subsections under it,"
-      :var ((heading (org-ol-tree-core--heading-create-internal
-                      :name "Test Heading"
-                      :id "1.2.3"
-                      :marker (point-marker)
-                      :level 3
-                      :parent nil
-                      :subheadings '(sub-heading1 sub-heading2))))
+      :var ((headline (org-ol-tree-core--headline-create-internal
+                       :name "Test Headline"
+                       :id "1.2.3"
+                       :marker (point-marker)
+                       :level 3
+                       :parent nil
+                       :children '(child1 child2))))
 
       (before-each
         (setq org-ol-tree-ui-icon-set 'ascii)
@@ -152,65 +152,65 @@
 
       (describe "and the section state is 'expanded,"
         (before-each
-          (setq icon (org-ol-tree-ui--section-icon heading 'expanded)))
+          (setq icon (org-ol-tree-ui--section-icon headline 'expanded)))
 
         (it "it should display the cursor column plus the expanded icon on its beginning"
           (expect icon :to-start-with " - ")))
 
       (describe "and the section state is 'collapsed,"
         (before-each
-          (setq icon (org-ol-tree-ui--section-icon heading 'collapsed)))
+          (setq icon (org-ol-tree-ui--section-icon headline 'collapsed)))
 
         (it "it should display the cursor column plus the collapsed icon on its beginning"
           (expect icon :to-start-with " + "))))
 
     (describe "when the section used to get the icon does not have subsections under it,"
-      :var ((heading (org-ol-tree-core--heading-create-internal
-                      :name "Test Heading"
-                      :id "1.2.3"
-                      :marker (point-marker)
-                      :level 3
-                      :parent nil
-                      :subheadings nil)))
+      :var ((headline (org-ol-tree-core--headline-create-internal
+                       :name "Test Headline"
+                       :id "1.2.3"
+                       :marker (point-marker)
+                       :level 3
+                       :parent nil
+                       :children nil)))
 
       (before-each
         (setq org-ol-tree-ui-icon-set 'ascii)
         (org-ol-tree-ui--update-icon-set)
-        (setq icon (org-ol-tree-ui--section-icon heading nil)))
+        (setq icon (org-ol-tree-ui--section-icon headline nil)))
 
       (it "it should start with a cursor column space plus two spaces for alignment"
         (expect icon :to-start-with "   ")))
 
     (describe "when the section icon contains the %(section) tag"
-      :var ((heading (org-ol-tree-core--heading-create-internal
-                      :name "Test Heading"
-                      :id "1.2.3"
-                      :marker (point-marker)
-                      :level 3
-                      :parent nil
-                      :subheadings nil)))
+      :var ((headline (org-ol-tree-core--headline-create-internal
+                       :name "Test Headline"
+                       :id "1.2.3"
+                       :marker (point-marker)
+                       :level 3
+                       :parent nil
+                       :children nil)))
 
       (before-each
         (setq org-ol-tree-ui-icon-set 'ascii
-              icon (org-ol-tree-ui--section-icon heading nil))
+              icon (org-ol-tree-ui--section-icon headline nil))
         (org-ol-tree-ui--update-icon-set))
 
       (it "it should show the section id on the icon"
         (expect icon :to-match "1\\.2\\.3")))
 
     (describe "when the section icon does not contain the %(section) tag"
-      :var ((heading (org-ol-tree-core--heading-create-internal
-                      :name "Test Heading"
-                      :id "1.2.3"
-                      :marker (point-marker)
-                      :level 3
-                      :parent nil
-                      :subheadings nil)))
+      :var ((headline (org-ol-tree-core--headline-create-internal
+                       :name "Test Headline"
+                       :id "1.2.3"
+                       :marker (point-marker)
+                       :level 3
+                       :parent nil
+                       :children nil)))
 
       (before-each
         (setq org-ol-tree-ui-icon-set 'iconless-ascii)
         (org-ol-tree-ui--update-icon-set)
-        (setq icon (org-ol-tree-ui--section-icon heading nil)))
+        (setq icon (org-ol-tree-ui--section-icon headline nil)))
 
       (it "it should show the section id on the icon"
         (expect icon :not :to-match "1\\.2\\.3")))))
