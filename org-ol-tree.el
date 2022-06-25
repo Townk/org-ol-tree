@@ -321,14 +321,6 @@ The outline chooses the theme based on the following criteria:
         (fboundp 'evil-window-middle)
         (fboundp 'evil-window-bottom)))
 
-(defun org-ol-tree-system--graphical-frame-p ()
-  "Return t if current frame is a GUI frame, nil otherwise.
-
-To find out if Emacs is running in GUI mode, we query the variable
-`window-system'."
-  (member window-system '(x w32 ns)))
-
-
 
 ;;;; --- Core objects
 
@@ -645,17 +637,17 @@ check the `org-ol-tree-ui-icon-set' variable documentation."
                    (cond
                     ((member org-ol-tree-ui-icon-set org-ol-tree-ui-icon-set-list)
                      org-ol-tree-ui-icon-set)
-                    ((and (org-ol-tree-system--graphical-frame-p)
+                    ((and (display-graphic-p)
                           (org-ol-tree-system--all-the-icons-p))
                      'all-the-icons)
-                    ((org-ol-tree-system--graphical-frame-p)
+                    ((display-graphic-p)
                      'unicode)
                     (t 'ascii)))))
 
 
 (defun org-ol-tree-ui--use-fancy-icons-p ()
   "Return t if the selected icon set is one of the `all-the-icons' set."
-  (and (org-ol-tree-system--graphical-frame-p)
+  (and (display-graphic-p)
        (org-ol-tree-system--all-the-icons-p)
        (or (not org-ol-tree-ui-icon-set)
            (member org-ol-tree-ui-icon-set '(all-the-icons iconless-fancy)))))
@@ -800,7 +792,7 @@ Valid states are 'visible, 'exists and 'none."
 
 This function takes in account the value of `org-ol-tree-ui-window-use-pixel'
 and if this frame is a graphical frame or not."
-  (and (org-ol-tree-system--graphical-frame-p)
+  (and (display-graphic-p)
         org-ol-tree-ui-window-use-pixel))
 
 
