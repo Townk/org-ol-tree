@@ -1246,19 +1246,24 @@ The file watched is always `org-ol-tree--org-buffer'.
 
 For more information on EVENT, check the documentation of
 `file-notify-add-watch'."
-  (cl-multiple-value-bind (descriptor action file) event
-    (when (member action '(renamed changed))
-      (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
-            (current-window (selected-window)))
-        (if (and ol-buffer (buffer-live-p ol-buffer))
-            (progn
-              (when (eq (org-ol-tree-ui--visibility) 'visible)
-                (select-window (get-buffer-window ol-buffer))
-                (org-ol-tree-action--refresh)
-                (select-window current-window)))
-          (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
-          (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
-          (file-notify-rm-watch descriptor))))))
+
+  (save-restriction
+    (widen)
+    (save-excursion
+      (cl-multiple-value-bind (descriptor action file) event
+        (when (member action '(renamed changed))
+          (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
+                (current-window (selected-window)))
+            (if (and ol-buffer (buffer-live-p ol-buffer))
+                (progn
+                  (when (eq (org-ol-tree-ui--visibility) 'visible)
+                    (select-window (get-buffer-window ol-buffer))
+                    (org-ol-tree-action--refresh)
+                    (select-window current-window)))
+              (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
+              (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
+              (file-notify-rm-watch descriptor))))))))
+
 
 
 (defun org-ol-tree-action--start-watching-buffer ()
