@@ -1485,19 +1485,22 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
 - If no org-ol-tree buffer exists for the current Org-file buffer create and
   show it."
   (interactive)
-  (unless (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer) (eq major-mode 'org-mode))
-    (user-error "Org Outline Tree can only be used with Org buffers"))
-  (pcase (org-ol-tree-ui--visibility)
-    ('visible
-     (if org-ol-tree--buffer-p
-         (delete-window (org-ol-tree-ui--get-window))
-       (org-ol-tree-ui--setup-window nil)))
-    ('exists
-     (org-ol-tree-ui--setup-buffer)
-     (org-ol-tree-ui--setup-window t)
-     (org-ol-tree-action--refresh))
-    ('none
-     (org-ol-tree-action--init))))
+  (save-restriction
+    (widen)
+    (save-excursion
+      (unless (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer) (eq major-mode 'org-mode))
+        (user-error "Org Outline Tree can only be used with Org buffers"))
+      (pcase (org-ol-tree-ui--visibility)
+        ('visible
+         (if org-ol-tree--buffer-p
+             (delete-window (org-ol-tree-ui--get-window))
+           (org-ol-tree-ui--setup-window nil)))
+        ('exists
+         (org-ol-tree-ui--setup-buffer)
+         (org-ol-tree-ui--setup-window t)
+         (org-ol-tree-action--refresh))
+        ('none
+         (org-ol-tree-action--init))))))
 
 
 
