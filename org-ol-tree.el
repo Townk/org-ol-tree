@@ -1009,6 +1009,9 @@ The argument EVENT, is the same event received by the
     (goto-char (posn-point (cadr event)))
     (goto-char (point-at-bol))
 
+    (when (eq (org-ol-tree--util-line-length) 0)
+      (keyboard-quit))
+
     (when (region-active-p)
       (keyboard-quit))
 
@@ -1037,6 +1040,8 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
     (goto-char (posn-point (cadr event)))
     (goto-char (point-at-bol))
     (when (region-active-p)
+      (keyboard-quit))
+    (when (eq (org-ol-tree--util-line-length) 0)
       (keyboard-quit))
     (org-ol-tree-action--visit)))
 
@@ -1078,9 +1083,13 @@ state is collapsed, the parent not will be selected."
 If the cursor is not on top of an expanded section, calling this function has no
 effect."
   (interactive)
+  (when (eq (org-ol-tree--util-line-length) 0)
+    (keyboard-quit))
+
   (pcase (org-ol-tree-core--node-get :state)
     ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
     ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))))
+
 
 
 (defun org-ol-tree-action--expand ()
@@ -1089,9 +1098,13 @@ effect."
 If the cursor is not on top of a collapsed section, calling this function has no
 effect."
   (interactive)
+  (when (eq (org-ol-tree--util-line-length) 0)
+    (keyboard-quit))
+
   (pcase (org-ol-tree-core--node-get :state)
     ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
     ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section))))
+
 
 
 (defun org-ol-tree-action--move-to (target-point)
@@ -1475,6 +1488,21 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
 
 
 ;;;; --- Commands
+
+;;;; --- Utils
+
+(defun org-ol-tree--util-line-length (&optional n)
+  "Length of the Nth line."
+  (if (not n)
+      (setq n (line-number-at-pos)))
+
+  (save-excursion
+    (goto-char (point-min))
+    (if (zerop (forward-line (1- n)))
+        (setq line-length-of-entry (- (line-end-position)
+           (line-beginning-position)))))
+  (princ line-length-of-entry))
+
 
 ;;;###autoload
 (defun org-ol-tree ()
