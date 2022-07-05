@@ -1101,7 +1101,9 @@ If the buffer is narrowed, it will get widen as a side effect of this function."
   (widen)
   (goto-char target-point)
   (org-reveal)
+  (+org/toggle-fold)
   (org-show-entry)
+  (org-show-children)
   (recenter (min (max 0 scroll-margin) (truncate (/ (window-body-height) 4.0))) t))
 
 
