@@ -1009,6 +1009,9 @@ The argument EVENT, is the same event received by the
     (goto-char (posn-point (cadr event)))
     (goto-char (point-at-bol))
 
+    (when (eq (org-ol-tree--util-line-length) 0)
+      (keyboard-quit))
+
     (when (region-active-p)
       (keyboard-quit))
 
@@ -1037,6 +1040,8 @@ This function cancels any timer call from `org-ol-tree-action--leftclick'."
     (goto-char (posn-point (cadr event)))
     (goto-char (point-at-bol))
     (when (region-active-p)
+      (keyboard-quit))
+    (when (eq (org-ol-tree--util-line-length) 0)
       (keyboard-quit))
     (org-ol-tree-action--visit)))
 
@@ -1078,9 +1083,13 @@ state is collapsed, the parent not will be selected."
 If the cursor is not on top of an expanded section, calling this function has no
 effect."
   (interactive)
+  (when (eq (org-ol-tree--util-line-length) 0)
+    (keyboard-quit))
+
   (pcase (org-ol-tree-core--node-get :state)
     ('treemacs-org-ol-doc-open-state (treemacs-collapse-org-ol-doc))
     ('treemacs-org-ol-parent-section-open-state (treemacs-collapse-org-ol-parent-section))))
+
 
 
 (defun org-ol-tree-action--expand ()
@@ -1089,9 +1098,13 @@ effect."
 If the cursor is not on top of a collapsed section, calling this function has no
 effect."
   (interactive)
+  (when (eq (org-ol-tree--util-line-length) 0)
+    (keyboard-quit))
+
   (pcase (org-ol-tree-core--node-get :state)
     ('treemacs-org-ol-doc-closed-state (treemacs-expand-org-ol-doc))
     ('treemacs-org-ol-parent-section-closed-state (treemacs-expand-org-ol-parent-section))))
+
 
 
 (defun org-ol-tree-action--move-to (target-point)
@@ -1101,7 +1114,9 @@ If the buffer is narrowed, it will get widen as a side effect of this function."
   (widen)
   (goto-char target-point)
   (org-reveal)
+  (+org/toggle-fold)
   (org-show-entry)
+  (org-show-children)
   (recenter (min (max 0 scroll-margin) (truncate (/ (window-body-height) 4.0))) t))
 
 
@@ -1246,19 +1261,24 @@ The file watched is always `org-ol-tree--org-buffer'.
 
 For more information on EVENT, check the documentation of
 `file-notify-add-watch'."
-  (cl-multiple-value-bind (descriptor action file) event
-    (when (member action '(renamed changed))
-      (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
-            (current-window (selected-window)))
-        (if (and ol-buffer (buffer-live-p ol-buffer))
-            (progn
-              (when (eq (org-ol-tree-ui--visibility) 'visible)
-                (select-window (get-buffer-window ol-buffer))
-                (org-ol-tree-action--refresh)
-                (select-window current-window)))
-          (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
-          (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
-          (file-notify-rm-watch descriptor))))))
+
+  (save-restriction
+    (widen)
+    (save-excursion
+      (cl-multiple-value-bind (descriptor action file) event
+        (when (member action '(renamed changed))
+          (let ((ol-buffer (ht-get org-ol-tree-action--watcher-buffers  descriptor))
+                (current-window (selected-window)))
+            (if (and ol-buffer (buffer-live-p ol-buffer))
+                (progn
+                  (when (eq (org-ol-tree-ui--visibility) 'visible)
+                    (select-window (get-buffer-window ol-buffer))
+                    (org-ol-tree-action--refresh)
+                    (select-window current-window)))
+              (ht-remove! org-ol-tree-action--watcher-buffers descriptor)
+              (ht-remove! org-ol-tree-action--buffer-watchers ol-buffer)
+              (file-notify-rm-watch descriptor))))))))
+
 
 
 (defun org-ol-tree-action--start-watching-buffer ()
@@ -1469,6 +1489,21 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
 
 ;;;; --- Commands
 
+;;;; --- Utils
+
+(defun org-ol-tree--util-line-length (&optional n)
+  "Length of the Nth line."
+  (if (not n)
+      (setq n (line-number-at-pos)))
+
+  (save-excursion
+    (goto-char (point-min))
+    (if (zerop (forward-line (1- n)))
+        (setq line-length-of-entry (- (line-end-position)
+           (line-beginning-position)))))
+  (princ line-length-of-entry))
+
+
 ;;;###autoload
 (defun org-ol-tree ()
   "Initialise or toggle org-ol-tree.
@@ -1480,19 +1515,22 @@ With a prefix ARG call `org-ol-tree-ui--kill-buffer' instead."
 - If no org-ol-tree buffer exists for the current Org-file buffer create and
   show it."
   (interactive)
-  (unless (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer) (eq major-mode 'org-mode))
-    (user-error "Org Outline Tree can only be used with Org buffers"))
-  (pcase (org-ol-tree-ui--visibility)
-    ('visible
-     (if org-ol-tree--buffer-p
-         (delete-window (org-ol-tree-ui--get-window))
-       (org-ol-tree-ui--setup-window nil)))
-    ('exists
-     (org-ol-tree-ui--setup-buffer)
-     (org-ol-tree-ui--setup-window t)
-     (org-ol-tree-action--refresh))
-    ('none
-     (org-ol-tree-action--init))))
+  (save-restriction
+    (widen)
+    (save-excursion
+      (unless (or org-ol-tree--buffer-p (buffer-live-p org-ol-tree--buffer) (eq major-mode 'org-mode))
+        (user-error "Org Outline Tree can only be used with Org buffers"))
+      (pcase (org-ol-tree-ui--visibility)
+        ('visible
+         (if org-ol-tree--buffer-p
+             (delete-window (org-ol-tree-ui--get-window))
+           (org-ol-tree-ui--setup-window nil)))
+        ('exists
+         (org-ol-tree-ui--setup-buffer)
+         (org-ol-tree-ui--setup-window t)
+         (org-ol-tree-action--refresh))
+        ('none
+         (org-ol-tree-action--init))))))
 
 
 
